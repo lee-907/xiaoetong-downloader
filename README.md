@@ -99,7 +99,7 @@ cp config.json.example config.json
 | cookie | 小鹅通web端的Cookie | 浏览器开发者工具中获取                                                                                                      |
 | product_id | 课程唯一标识 | 课程链接URL中获取，如 `https://...xet.citv.cn/p/course/column/p_608baa19e4b071a81eb6ebbc` 中的 `p_608baa19e4b071a81eb6ebbc` |
 | download_dir | 下载目录 | 可选，默认为 `download`                                                                                                |
-| filter | 下载目录 | 可选，默认为 `[]`                                                                                                      |
+| filter | 章节过滤 | 可选，默认为 `[]`                                                                                                      |
 
 
 ### 3. 使用方法
