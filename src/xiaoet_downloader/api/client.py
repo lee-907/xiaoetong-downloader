@@ -16,7 +16,7 @@ class XiaoetAPIClient:
     GET_COLUMN_ITEMS_URL = "https://{0}.h5.xet.citv.cn/xe.course.business.avoidlogin.e_course.resource_catalog_list.get/1.0.0"
     GET_VIDEO_DETAILS_INFO_URL = "https://{0}.h5.xiaoeknow.com/xe.course.business.video.detail_info.get/2.0.0"
     GET_DOCUMENT_DETAILS_INFO_URL = "https://{0}.h5.xet.citv.cn/xe.course.business.e_course.document_info.get/1.0.0"
-    GET_LIVE_LOOK_BACK_DETAILS_INFO_URL = "https://m.zhixuehaoke.com/_alive/api/get_lookback_list"
+    GET_LIVE_LOOK_BACK_DETAILS_INFO_URL = "https://{0}.h5.xiaoeknow.com/_alive/v3/get_lookback_list"
     GET_MICRO_NAVIGATION_URL = "https://{0}.h5.xiaoeknow.com/xe.micro_page.navigation.get/1.0.0"
     GET_PLAY_URL = "https://{0}.h5.xiaoeknow.com/xe.material-center.play/getPlayUrl"
     
@@ -74,20 +74,16 @@ class XiaoetAPIClient:
             response.raise_for_status()
             data = response.json().get('data', {})
             items = data.get('list', [])
-            if p_id == "0":
-                return [(item.get('resource_id'), item.get('resource_title'), self.get_column_items(app_id,column_id,item.get('resource_id'))) for item in items]
-                # chap = [(items[2].get('resource_id'), items[1].get('resource_title'),
-                #          self.get_column_items(app_id, column_id, items[2].get('resource_id'))) ]
-                #  chap
-            #{'id': 31482586, 'app_id': 'appGhRZuOra6587', 'p_id': 'chap_32leFVtbvbwm4se35OdwYApAol1',
-            # 'course_id': 'course_2faMPUe85iHzAukP1xlZxWU1t8Y', 'chapter_id': 'l_68c8f08ae4b0694ca118e8bf', 'resource_id': 'l_68c8f08ae4b0694ca118e8bf',
-            # 'chapter_type': 2, 'chapter_title': 'MBA、MPA和MTA择校指导', 'resource_title': 'MBA、MPA和MTA择校指导', 'resource_type': 4, 'chapter_state': 0,
-            # 'sort_value': 3, 'unlock_condition': '[{"operate":"JOIN","value":"0"}]', 'unlock_date': '0001-01-01 00:00:00', 'try_length': 0,
-            # 'is_elective': 0, 'sub_course_id': '', 'sub_course_sort_value': 0, 'section_num': 0, 'try_num': 0, 'is_try': 0, 'children': [],
-            # 'sort_c': '02', 'elective': 0, 'unlock_state': 1, 'study_status': 1, 'learn_progress': 83,
-            # 'jump_url': '/v2/course/alive/l_68c8f08ae4b0694ca118e8bf?app_id=appGhRZuOra6587&alive_mode=&pro_id=course_2faMPUe85iHzAukP1xlZxWU1t8Y&type=2',
-            # 'alive_status': 3, 'alive_start_time': '2025-09-24 19:00:00', 'img_url': '', 'is_lookback': 1, 'has_breathing_lamp': 0}
-            return [(item.get('resource_id'), item.get('resource_title')) for item in items]
+
+            result = []
+            for item in items:
+                children = item.get('children', [])
+                if children:
+                    sub = self.get_column_items(app_id, column_id, item.get('resource_id'))
+                    result.extend(sub)
+                else:
+                    result.append((item.get('resource_id'), item.get('resource_title')))
+            return result
         except requests.RequestException as e:
             raise Exception(f"获取专栏项目列表失败: {str(e)}")
         except json.JSONDecodeError as e:
@@ -108,8 +104,8 @@ class XiaoetAPIClient:
         try:
             response = requests.post(url, headers=headers, data=payload)
             response.raise_for_status()
-            data = response.json().get('data', {}).get('video_info', {})
-            return data
+            data = response.json().get('data', {})
+            return data.get('video_info', {}) if isinstance(data, dict) else None
         except requests.RequestException as e:
             raise Exception(f"获取视频详情失败: {str(e)}")
         except json.JSONDecodeError as e:
@@ -139,12 +135,12 @@ class XiaoetAPIClient:
             raise Exception(f"解析文件详情响应失败: {str(e)}")
 
     def get_lookback_detail_info(self, resource_id: str) -> List:
-        """获取视频详情信息"""
-        url = self.GET_LIVE_LOOK_BACK_DETAILS_INFO_URL
+        """获取直播回放列表（含 m3u8 地址）"""
+        url = self.GET_LIVE_LOOK_BACK_DETAILS_INFO_URL.format(self.config.app_id)
         payload = {
             "app_id": self.config.app_id,
             "alive_id": resource_id,
-            "course_id": self.config.product_id
+            "protection": "0"
         }
         headers = {
             'cookie': self.config.cookie,
@@ -153,8 +149,7 @@ class XiaoetAPIClient:
         try:
             response = requests.get(url, headers=headers, params=payload)
             response.raise_for_status()
-            data = response.json().get('data', {})
-            return data
+            return response.json().get('data', [])
         except requests.RequestException as e:
             raise Exception(f"获取文件详情失败: {str(e)}")
         except json.JSONDecodeError as e:

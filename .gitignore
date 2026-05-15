@@ -175,3 +175,10 @@ cython_debug/
 
 
 .idea
+
+# downloaded file
+download/
+# config file
+config.json
+# log file
+logs/

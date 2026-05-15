@@ -54,95 +54,88 @@ class XiaoetDownloadManager:
             if not resource_items:
                 logger.warning("未找到课程资源")
                 return results
-            lens = 0
-            for item in resource_items:
-                lens += len(item[2])
+            lens = len(resource_items)
             logger.info(f"找到 {lens} 个资源")
-            for chapter_index, (chapter_id, chapter_title, resource_item_list) in enumerate(resource_items):
-                if chapter_title in self.config.filter:
-                    logger.info(f"[{chapter_index + 1}/{len(resource_items)}] 跳过章节: {chapter_title} ({chapter_id})")
-                    continue
-                logger.info(f"[{chapter_index + 1}/{len(resource_items)}] 处理章节: {chapter_title} ({chapter_id})")
-                chapter_path = os.path.join(self.config.download_dir, chapter_title)
-                # 判断文件夹是否存在
-                if not os.path.exists(chapter_path):
-                    # 创建文件夹（包括所有父级目录）
-                    os.makedirs(chapter_path)
-                    print(f"文件夹 {chapter_path} 创建成功")
-                else:
-                    print(f"文件夹 {chapter_path} 已存在")
-                # 处理每个资源
-                for index, (resource_id, resource_title) in enumerate(resource_item_list):
-                    try:
 
-                        if resource_id.startswith('d_'):
-                            resource_type = ResourceType.DOCUMENT
-                            logger.info(
-                                f"[{index + 1}/{len(resource_item_list)}/{lens}] {resource_title} ({resource_id}) 是文档")
-                        elif resource_id.startswith('l_'):
-                            resource_type = ResourceType.LIVE
-                            logger.info(
-                                f"[{index + 1}/{len(resource_item_list)}/{lens}] {resource_title} ({resource_id}) 是直播")
-                        elif resource_id.startswith('v_'):
-                            resource_type = ResourceType.VIDEO
-                            logger.info(
-                                f"[{index + 1}/{len(resource_item_list) + 1}/{lens}] {resource_title} ({resource_id}) 是视频")
-                        else:
-                            logger.info(
-                                f"[{index + 1}/{len(resource_item_list) + 1}/{lens}] 没有实现的资源: {resource_title} ({resource_id})")
+            # 确保下载根目录存在
+            FileUtils.ensure_dir(self.config.download_dir)
+
+            for index, (resource_id, resource_title) in enumerate(resource_items):
+                try:
+                    if resource_title in self.config.filter:
+                        logger.info(f"[{index + 1}/{lens}] 跳过: {resource_title} ({resource_id})")
+                        continue
+
+                    if resource_id.startswith('i_'):
+                        logger.info(f"[{index + 1}/{lens}] 笔记/图文，暂不支持下载: {resource_title}")
+                        continue
+                    elif resource_id.startswith('d_'):
+                        resource_type = ResourceType.DOCUMENT
+                    elif resource_id.startswith('l_'):
+                        resource_type = ResourceType.LIVE
+                    elif resource_id.startswith('v_'):
+                        resource_type = ResourceType.VIDEO
+                    else:
+                        logger.info(f"[{index + 1}/{lens}] 未知资源类型: {resource_title} ({resource_id})")
+                        continue
+
+                    logger.info(f"[{index + 1}/{lens}] {resource_title} ({resource_id})")
+
+                    resource = Resource(
+                        resource_id=resource_id,
+                        title=resource_title,
+                        resource_type=resource_type
+                    )
+
+                    if resource_type == ResourceType.DOCUMENT:
+                        doc_info = self._get_document_url(resource)
+                        if not doc_info:
+                            results['failed'].append(DownloadResult(resource, False, "无法获取文档地址"))
                             continue
-                        # 创建视频资源对象
-                        resource = Resource(
-                            resource_id=resource_id,
-                            title=resource_title,
-                            resource_type=resource_type
-                        )
-                        if resource_type == ResourceType.DOCUMENT:
-                            document_title, document_url = self._get_document_url(resource)
-                            final_path = os.path.join(chapter_path, document_title)
-                            self.downloader.download_document(document_url, final_path)
-                        elif resource_type == ResourceType.VIDEO or resource_type == ResourceType.LIVE:
-                            # 获取播放URL
-                            if resource_type == ResourceType.LIVE:
-                                play_url = self._get_live_m3u8_url(resource)
-                            else:
-                                play_url = self._get_play_url(resource, user_id)
+                        document_title, document_url = doc_info
+                        final_path = os.path.join(self.config.download_dir, document_title)
+                        if self.downloader.download_document(document_url, final_path):
+                            results['success'].append(DownloadResult(resource, True, "下载完成", final_path))
+                        else:
+                            results['failed'].append(DownloadResult(resource, False, "文档下载失败"))
+                    elif resource_type in (ResourceType.VIDEO, ResourceType.LIVE):
+                        if resource_type == ResourceType.LIVE:
+                            play_url = self._get_live_m3u8_url(resource)
                             if not play_url:
-                                result = DownloadResult(resource, False, "无法获取播放地址")
-                                results['failed'].append(result)
-                                continue
-                            # 下载视频
-                            download_result = self.downloader.download_m3u8_video(
-                                resource, play_url, chapter_path, nocache
-                            )
-                            if download_result.success and auto_transcode:
-                                # 自动转码
-                                transcode_result = self.transcoder.transcode_video(resource, chapter_path, index + 1)
-                                if transcode_result.success:
-                                    results['success'].append(transcode_result)
-                                else:
-                                    results['failed'].append(transcode_result)
-                            elif download_result.success:
-                                results['success'].append(download_result)
-                            else:
-                                results['failed'].append(download_result)
+                                play_url = self._get_play_url(resource, user_id)
+                        else:
+                            play_url = self._get_play_url(resource, user_id)
+                        if not play_url:
+                            results['failed'].append(DownloadResult(resource, False, "无法获取播放地址"))
+                            continue
 
-                    except Exception as e:
-                        error_msg = f"处理视频 {resource_title} 时出错: {str(e)}"
-                        logger.error(error_msg)
-                        result = DownloadResult(
-                            Resource(resource_id, resource_title),
-                            False,
-                            error_msg
+                        download_result = self.downloader.download_m3u8_video(
+                            resource, play_url, self.config.download_dir, nocache
                         )
-                        results['failed'].append(result)
+                        if download_result.success and auto_transcode:
+                            transcode_result = self.transcoder.transcode_video(
+                                resource, self.config.download_dir, index + 1
+                            )
+                            if transcode_result.success:
+                                results['success'].append(transcode_result)
+                            else:
+                                results['failed'].append(transcode_result)
+                        elif download_result.success:
+                            results['success'].append(download_result)
+                        else:
+                            results['failed'].append(download_result)
 
-                # 打印处理结果
-                self._print_summary(results)
+                except Exception as e:
+                    error_msg = f"处理 {resource_title} 时出错: {str(e)}"
+                    logger.error(error_msg)
+                    results['failed'].append(DownloadResult(
+                        Resource(resource_id, resource_title), False, error_msg
+                    ))
 
         except Exception as e:
             logger.error(f"下载课程时发生错误: {str(e)}")
 
+        self._print_summary(results)
         return results
 
     def download_single_video(self, resource_id: str, nocache: bool = False,
@@ -170,14 +163,23 @@ class XiaoetDownloadManager:
                 )
 
             # 创建视频资源对象（标题暂时未知）
+            if resource_id.startswith('l_'):
+                resource_type = ResourceType.LIVE
+            elif resource_id.startswith('v_'):
+                resource_type = ResourceType.VIDEO
+            else:
+                resource_type = ResourceType.AUDIO
             resource = Resource(
                 resource_id=resource_id,
                 title="未知",
-                resource_type=ResourceType.VIDEO if resource_id.startswith('v_') else ResourceType.AUDIO
+                resource_type=resource_type
             )
 
             # 获取播放URL
-            play_url = self._get_play_url(resource, user_id)
+            if resource_type == ResourceType.LIVE:
+                play_url = self._get_live_m3u8_url(resource)
+            else:
+                play_url = self._get_play_url(resource, user_id)
             if not play_url:
                 return DownloadResult(resource, False, "无法获取播放地址")
 
