@@ -215,9 +215,21 @@ class XiaoetDownloadManager:
             else:
                 resource_type = ResourceType.AUDIO
 
+            # 在所有课程中查找该资源的标题
+            title = resource_id  # 默认用 ID
+            for product in self.config.products:
+                try:
+                    items = self.api_client.get_column_items(self.config.app_id, product['product_id'])
+                    for rid, rtitle in items:
+                        if rid == resource_id:
+                            title = rtitle
+                            break
+                except Exception:
+                    pass
+
             resource = Resource(
                 resource_id=resource_id,
-                title="未知",
+                title=title,
                 resource_type=resource_type
             )
 
@@ -318,11 +330,9 @@ class XiaoetDownloadManager:
         try:
             live_details = self.api_client.get_lookback_detail_info(resource.resource_id)
             if isinstance(live_details, dict):
-                # 直接返回 redirect 或 uRL 字段中的 URL
-                for key in ('line_sharpness', 'redirect', 'uRL', 'url'):
+                # redirect/uRL 是登录重定向，不是视频地址，忽略
+                for key in ('line_sharpness',):
                     val = live_details.get(key)
-                    if isinstance(val, str) and val.startswith('http'):
-                        return val
                     if isinstance(val, list):
                         for item in val:
                             if isinstance(item, dict):
