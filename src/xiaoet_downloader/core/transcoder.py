@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import shutil
 import ffmpy
 
 from ..models.resource import Resource, VideoMetadata, DownloadResult, DownloadStatus
@@ -72,6 +73,12 @@ class VideoTranscoder:
                 resource.download_status = DownloadStatus.COMPLETED
                 resource.file_path = output_file
                 logger.info(f"视频合并完成: {output_file}")
+                # 删除 TS 缓存目录
+                try:
+                    shutil.rmtree(resource_dir)
+                    logger.info(f"已清理 TS 缓存: {resource_dir}")
+                except Exception as e:
+                    logger.warning(f"清理 TS 缓存失败: {e}")
                 return DownloadResult(resource, True, "合并完成", output_file)
             else:
                 return DownloadResult(resource, False, "合并后文件不存在或为空")
