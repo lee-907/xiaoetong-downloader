@@ -115,27 +115,21 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
                 logger.error("等待扫码超时（2分钟），请重试")
                 return ""
 
-            # 导航到课程域，完成跨域 SSO
+            # 导航到课程域，通过 SSO auth 链接完成跨域认证
             logger.info("正在同步登录态...")
             time.sleep(2)
 
-            # 先访问课程域首页，触发 SSO 重定向
-            app_home = f"https://{app_id}.h5.xiaoeknow.com"
+            # 构造 SSO auth URL（与 API 返回的 redirect 格式一致）
+            auth_url = (
+                f"https://{app_id}.h5.xiaoeknow.com/p/t/free/v1/basic-platform/"
+                f"h5_basic/login/auth?redirect_url=https%3A%2F%2F{app_id}.h5.xiaoeknow.com"
+            )
             try:
-                page.goto(app_home, wait_until="networkidle", timeout=30000)
+                page.goto(auth_url, wait_until="networkidle", timeout=30000)
                 time.sleep(3)
-                logger.info(f"已访问 {app_home}，当前 URL: {page.url}")
+                logger.info(f"SSO 完成，当前 URL: {page.url}")
             except Exception as e:
-                logger.warning(f"访问课程域失败: {e}")
-
-            # 再访问课程页
-            course_url = f"https://{app_id}.h5.xiaoeknow.com/p/course/{product_id}"
-            try:
-                page.goto(course_url, wait_until="networkidle", timeout=30000)
-                time.sleep(2)
-                logger.info(f"已访问课程页，当前 URL: {page.url}")
-            except Exception:
-                pass
+                logger.warning(f"SSO 失败: {e}")
 
             # 提取所有 cookie
             all_cookies = context.cookies()
