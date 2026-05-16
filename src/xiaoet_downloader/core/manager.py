@@ -91,12 +91,19 @@ class XiaoetDownloadManager:
 
             for index, (resource_id, resource_title) in enumerate(resource_items):
                 try:
-                    # 增量跳过：manifest 中已完成的资源
+                    # 增量跳过：manifest 中已完成的资源（但仍检查 PPT）
                     if not force and manifest.is_completed(resource_id):
                         logger.info(f"[{index + 1}/{lens}] 跳过 (已下载): {resource_title} ({resource_id})")
                         results['skipped'].append(DownloadResult(
                             Resource(resource_id, resource_title), True, "已下载"
                         ))
+                        if resource_id.startswith('l_'):
+                            ppt_dir = os.path.join(course_dir, FileUtils.sanitize_filename(resource_title), 'ppt')
+                            if not os.path.exists(ppt_dir):
+                                self._download_ppt_images(
+                                    Resource(resource_id, resource_title, ResourceType.LIVE),
+                                    course_dir, user_id
+                                )
                         continue
 
                     if resource_title in self.config.filter:
