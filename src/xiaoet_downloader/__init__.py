@@ -13,6 +13,7 @@ __description__ = "小鹅通视频下载器"
 
 from .models.config import XiaoetConfig
 from .models.resource import Resource, VideoMetadata, DownloadResult
+from .models.manifest import DownloadManifest
 from .core.manager import XiaoetDownloadManager
 from .utils.logger import logger
 
@@ -21,6 +22,7 @@ __all__ = [
     'Resource',
     'VideoMetadata',
     'DownloadResult',
+    'DownloadManifest',
     'XiaoetDownloadManager',
     'logger'
 ]

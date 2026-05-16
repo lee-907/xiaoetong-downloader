@@ -3,7 +3,7 @@
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -12,9 +12,10 @@ class XiaoetConfig:
     """小鹅通配置类"""
     app_id: str
     cookie: str
-    product_id: str
+    products: list = field(default_factory=list)
     download_dir: str = 'download'
-    filter: list = None
+    filter: list = field(default_factory=list)
+    max_workers: int = 3
 
     @classmethod
     def from_file(cls, config_path: str) -> 'XiaoetConfig':
@@ -23,12 +24,27 @@ class XiaoetConfig:
             with open(config_path, 'r', encoding='utf-8') as file:
                 config_data = json.load(file)
 
+            products = config_data.get('products', [])
+
+            # 兼容旧格式: 有 product_id 时自动包装为 products 列表
+            if not products and 'product_id' in config_data:
+                products = [{
+                    'product_name': config_data.get('product_name', 'default'),
+                    'product_id': config_data['product_id']
+                }]
+
+            # 确保 download_dir 为绝对路径
+            download_dir = config_data.get('download_dir', 'download')
+            if not os.path.isabs(download_dir):
+                download_dir = os.path.abspath(download_dir)
+
             return cls(
                 app_id=config_data.get('app_id', ''),
                 cookie=config_data.get('cookie', ''),
-                product_id=config_data.get('product_id', ''),
-                download_dir=config_data.get('download_dir', 'download'),
-                filter = config_data.get('filter', [])
+                products=products,
+                download_dir=download_dir,
+                filter=config_data.get('filter', []),
+                max_workers=config_data.get('max_workers', 3)
             )
         except FileNotFoundError:
             raise FileNotFoundError(f"配置文件 {config_path} 不存在")
@@ -43,8 +59,13 @@ class XiaoetConfig:
             raise ValueError("app_id 不能为空")
         if not self.cookie:
             raise ValueError("cookie 不能为空")
-        if not self.product_id:
-            raise ValueError("product_id 不能为空")
+        if not self.products:
+            raise ValueError("products 不能为空")
+        for i, p in enumerate(self.products):
+            if not p.get('product_id'):
+                raise ValueError(f"products[{i}].product_id 不能为空")
+            if not p.get('product_name'):
+                raise ValueError(f"products[{i}].product_name 不能为空")
         return True
 
     def to_dict(self) -> dict:
@@ -52,6 +73,11 @@ class XiaoetConfig:
         return {
             'app_id': self.app_id,
             'cookie': self.cookie,
-            'product_id': self.product_id,
-            'download_dir': self.download_dir
+            'products': self.products,
+            'download_dir': self.download_dir,
+            'max_workers': self.max_workers
         }
+
+    def get_course_dir(self, product: dict) -> str:
+        """获取课程下载目录路径"""
+        return os.path.join(self.download_dir, product['product_name'])

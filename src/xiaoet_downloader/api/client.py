@@ -89,12 +89,12 @@ class XiaoetAPIClient:
         except json.JSONDecodeError as e:
             raise Exception(f"解析专栏项目列表响应失败: {str(e)}")
     
-    def get_video_detail_info(self, resource_id: str) -> Dict[str, Any]:
+    def get_video_detail_info(self, resource_id: str, product_id: str) -> Dict[str, Any]:
         """获取视频详情信息"""
         url = self.GET_VIDEO_DETAILS_INFO_URL.format(self.config.app_id)
         payload = {
             'bizData[resource_id]': resource_id,
-            'bizData[product_id]': self.config.product_id,
+            'bizData[product_id]': product_id,
             'bizData[opr_sys]': 'Win32'
         }
         headers = {
@@ -111,13 +111,13 @@ class XiaoetAPIClient:
         except json.JSONDecodeError as e:
             raise Exception(f"解析视频详情响应失败: {str(e)}")
 
-    def get_document_detail_info(self, resource_id: str) -> Dict[str, Any]:
-        """获取视频详情信息"""
+    def get_document_detail_info(self, resource_id: str, product_id: str) -> Dict[str, Any]:
+        """获取文档详情信息"""
         url = self.GET_DOCUMENT_DETAILS_INFO_URL.format(self.config.app_id)
         payload = {
             "bizData":{
                 'resource_id': resource_id,
-                'product_id': self.config.product_id
+                'product_id': product_id
             }
         }
         headers = {

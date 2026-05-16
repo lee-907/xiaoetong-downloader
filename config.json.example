@@ -1,7 +1,13 @@
 {
   "app_id": "your_app_id_here",
   "cookie": "your_cookie_here",
-  "product_id": "your_product_id_here",
+  "products": [
+    {
+      "product_name": "课程名称",
+      "product_id": "your_product_id_here"
+    }
+  ],
   "download_dir": "download",
-  "filter":["",""]
+  "max_workers": 3,
+  "filter": []
 }

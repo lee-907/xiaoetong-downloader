@@ -56,6 +56,12 @@ def main():
     )
 
     parser.add_argument(
+        '--force', '-f',
+        action='store_true',
+        help='忽略下载清单，强制重新下载全部资源'
+    )
+
+    parser.add_argument(
         '--no-transcode',
         action='store_true',
         help='只下载不转码'
@@ -120,15 +126,16 @@ def main():
                 logger.error(f"下载失败: {result.message}")
                 return 1
 
-        # 下载整个课程
-        logger.info("开始下载课程")
-        results = manager.download_course(
+        # 下载所有课程
+        logger.info("开始下载所有课程")
+        results = manager.download_all_courses(
             nocache=args.no_cache,
-            auto_transcode=not args.no_transcode
+            auto_transcode=not args.no_transcode,
+            force=args.force
         )
 
         # 返回适当的退出码
-        if results['failed']:
+        if results['total_failed']:
             return 1
         else:
             return 0

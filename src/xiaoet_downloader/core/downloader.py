@@ -4,8 +4,10 @@
 import os
 import sys
 import time
+import threading
 import requests
 import m3u8
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple
 from m3u8.model import SegmentList, Segment, find_key
 
@@ -28,23 +30,24 @@ class VideoDownloader:
         })
 
     def download_m3u8_video(self, resource: Resource, play_url: str,
-                            download_dir: str, nocache: bool = False) -> DownloadResult:
+                            download_dir: str, nocache: bool = False,
+                            max_workers: int = 3) -> DownloadResult:
         """
         下载m3u8视频
-        
+
         Args:
             resource: 视频资源对象
             play_url: m3u8播放地址
             download_dir: 下载目录
             nocache: 是否忽略缓存
-            
+            max_workers: 并行下载线程数
+
         Returns:
             DownloadResult: 下载结果
         """
         if not play_url:
             return DownloadResult(resource, False, "无效的播放地址")
 
-        # 创建资源目录
         resource_dir = os.path.join(download_dir, resource.resource_id)
         FileUtils.ensure_dir(resource_dir)
 
@@ -52,12 +55,10 @@ class VideoDownloader:
             resource.download_status = DownloadStatus.DOWNLOADING
             logger.info(f"开始下载视频: {resource.title}")
 
-            # 获取m3u8内容
             response = self.session.get(play_url)
             if response.status_code != 200:
                 return DownloadResult(resource, False, f"获取m3u8内容失败: HTTP {response.status_code}")
 
-            # 解析m3u8内容
             try:
                 media = m3u8.loads(response.text)
             except Exception as e:
@@ -66,47 +67,72 @@ class VideoDownloader:
             if not media.data.get('segments'):
                 return DownloadResult(resource, False, "m3u8文件中没有找到视频片段")
 
-            # 获取URL前缀
             url_prefix = self._get_url_prefix(play_url)
-            segments = SegmentList()
-            changed = False
-            complete = True
             total_segments = len(media.data['segments'])
-            downloaded_segments = 0
 
             logger.info(f"总计 {total_segments} 个视频片段")
 
-            # 下载每个视频片段
+            # 预扫描：区分已缓存和需下载的片段
+            segment_map = {}  # index -> Segment
+            pending_indices = []  # 需要下载的 index 列表
+            downloaded_count = 0
 
             for index, segment in enumerate(media.data['segments']):
                 ts_file = os.path.join(resource_dir, f'v_{index}.ts')
-
-                # 如果文件已存在且不忽略缓存，则跳过
-                if not nocache and os.path.exists(ts_file):
-                    total_segments100 = int((index + 1) / total_segments)
-                    percent = total_segments100
-                    filled_length = int(50 * total_segments100)
-                    bar = '█' * filled_length + '░' * (50 - filled_length)
-
-                    # 在同一行更新
-                    sys.stdout.write(f'\r[{bar}] {percent:.1%} ({(index + 1)}/{total_segments})')
-                    sys.stdout.flush()
-                    # logger.info(f"[{index+1}/{total_segments}] 已下载: {os.path.basename(ts_file)}")
-                    downloaded_segments += 1
-                else:
-                    # 下载片段
-                    success = self._download_segment(segment, ts_file, url_prefix, index + 1, total_segments)
-                    if success:
-                        changed = True
-                        downloaded_segments += 1
-                    else:
-                        complete = False
-
-                # 更新片段URI为本地文件
                 segment['uri'] = f'v_{index}.ts'
-                segments.append(
-                    Segment(base_uri=None, keyobject=find_key(segment.get('key', {}), media.keys), **segment))
+                seg = Segment(base_uri=None, keyobject=find_key(segment.get('key', {}), media.keys), **segment)
+                segment_map[index] = seg
+
+                if not nocache and os.path.exists(ts_file):
+                    downloaded_count += 1
+                else:
+                    pending_indices.append(index)
+
+            # 并行下载未缓存的片段
+            if pending_indices:
+                lock = threading.Lock()
+                failed = False
+                completed = 0
+                total_pending = len(pending_indices)
+
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {}
+                    for index in pending_indices:
+                        segment = media.data['segments'][index]
+                        ts_file = os.path.join(resource_dir, f'v_{index}.ts')
+                        future = executor.submit(
+                            self._download_segment, segment, ts_file, url_prefix,
+                            index + 1, total_segments
+                        )
+                        futures[future] = index
+
+                    for future in as_completed(futures):
+                        success = future.result()
+                        with lock:
+                            completed += 1
+                            if success:
+                                downloaded_count += 1
+                            else:
+                                failed = True
+                            # 更新进度条
+                            current_total = downloaded_count
+                            percent = current_total / total_segments
+                            filled_length = int(50 * percent)
+                            bar = '█' * filled_length + '░' * (50 - filled_length)
+                            sys.stdout.write(f'\r[{bar}] {percent:.1%} ({current_total}/{total_segments})')
+                            sys.stdout.flush()
+
+            # 构建最终进度条（下载部分完成后）
             print()
+
+            # 按索引顺序构建 segments 列表
+            segments = SegmentList()
+            for index in sorted(segment_map.keys()):
+                segments.append(segment_map[index])
+
+            changed = len(pending_indices) > 0 and downloaded_count > 0
+            complete = downloaded_count == total_segments
+
             # 生成本地m3u8文件
             m3u8_file = os.path.join(resource_dir, 'video.m3u8')
             if changed or not os.path.exists(m3u8_file):
@@ -119,19 +145,18 @@ class VideoDownloader:
                 title=resource.title,
                 complete=complete,
                 total_segments=total_segments,
-                downloaded_segments=downloaded_segments
+                downloaded_segments=downloaded_count
             )
             FileUtils.save_json(metadata.to_dict(), os.path.join(resource_dir, 'metadata.json'))
 
-            # 更新资源状态
             resource.download_status = DownloadStatus.COMPLETED if complete else DownloadStatus.FAILED
 
             if complete:
                 logger.info(f"视频下载完成: {resource.title}")
                 return DownloadResult(resource, True, "下载完成", resource_dir)
             else:
-                logger.warning(f"视频下载不完整: {resource.title} ({downloaded_segments}/{total_segments})")
-                return DownloadResult(resource, False, f"下载不完整 ({downloaded_segments}/{total_segments})")
+                logger.warning(f"视频下载不完整: {resource.title} ({downloaded_count}/{total_segments})")
+                return DownloadResult(resource, False, f"下载不完整 ({downloaded_count}/{total_segments})")
 
         except Exception as e:
             resource.download_status = DownloadStatus.FAILED
@@ -148,7 +173,7 @@ class VideoDownloader:
                           current: int, total: int, max_retries: int = 3) -> bool:
         """
         下载单个视频片段
-        
+
         Args:
             segment: 片段信息
             ts_file: 本地文件路径
@@ -156,80 +181,52 @@ class VideoDownloader:
             current: 当前片段序号
             total: 总片段数
             max_retries: 最大重试次数
-            
+
         Returns:
             bool: 是否下载成功
         """
-        # 构建片段URL
         segment_url = segment.get('uri')
         if not segment_url.startswith('http'):
             segment_url = url_prefix + segment_url
 
-        retry_count = 0
-        while retry_count < max_retries:
+        for retry_count in range(max_retries):
             try:
                 response = self.session.get(segment_url, timeout=30)
                 if response.status_code == 200:
-                    # 写入临时文件，下载完成后重命名
                     temp_file = ts_file + '.tmp'
                     with open(temp_file, 'wb') as f:
                         f.write(response.content)
                     os.rename(temp_file, ts_file)
-
-                    total_segments100 = (current + 1) / total
-                    percent = total_segments100
-                    filled_length = int(50 * total_segments100)
-                    bar = '█' * filled_length + '░' * (50 - filled_length)
-
-                    # 在同一行更新
-                    sys.stdout.write(f'\r[{bar}] {percent:.1%} ({(current + 1)}/{total})')
-                    sys.stdout.flush()
-
-                    # logger.info(f"[{current}/{total}] 下载成功: {os.path.basename(ts_file)}")
                     return True
                 else:
-                    logger.warning(f"[{current}/{total}] 下载失败: HTTP {response.status_code}")
-                    retry_count += 1
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"[{current}/{total}] 下载出错: {str(e)}")
-                retry_count += 1
-                if retry_count < max_retries:
-                    time.sleep(1)  # 等待1秒后重试
+                    if retry_count < max_retries - 1:
+                        time.sleep(1)
+            except requests.exceptions.RequestException:
+                if retry_count < max_retries - 1:
+                    time.sleep(1)
 
-        logger.error(f"[{current}/{total}] 达到最大重试次数，下载失败")
+        logger.warning(f"[{current}/{total}] 达到最大重试次数，下载失败")
         return False
 
     def download_document(self, document_url: str, document_file: str, max_retries: int = 3) -> bool:
-        """
-                下载附件信息
-                Args:
-                    document_url: 下载链接
-                    document_file: 本地文件路径
-                    max_retries: 最大重试次数
-                Returns:
-                    bool: 是否下载成功
-        """
+        """下载文档"""
         if os.path.exists(document_file):
             return True
 
-        retry_count = 0
-        while retry_count < max_retries:
+        for retry_count in range(max_retries):
             try:
                 response = self.session.get(document_url, timeout=30)
                 if response.status_code == 200:
-                    # 写入临时文件，下载完成后重命名
                     temp_file = document_file + '.tmp'
                     with open(temp_file, 'wb') as f:
                         f.write(response.content)
                     os.rename(temp_file, document_file)
-
                     return True
                 else:
-                    logger.warning(f" 下载失败: HTTP {response.status_code}")
-                    retry_count += 1
-            except requests.exceptions.RequestException as e:
-                retry_count += 1
-                if retry_count < max_retries:
-                    time.sleep(1)  # 等待1秒后重试
+                    if retry_count < max_retries - 1:
+                        time.sleep(1)
+            except requests.exceptions.RequestException:
+                if retry_count < max_retries - 1:
+                    time.sleep(1)
         logger.error(f"[{retry_count}/{max_retries}] 达到最大重试次数，下载失败")
         return False
