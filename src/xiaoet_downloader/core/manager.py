@@ -317,14 +317,29 @@ class XiaoetDownloadManager:
         """获取直播回放 m3u8 地址"""
         try:
             live_details = self.api_client.get_lookback_detail_info(resource.resource_id)
-            for live_detail in live_details:
-                if isinstance(live_detail, dict):
-                    for sharpness in live_detail.get('line_sharpness', []):
-                        url = sharpness.get('url') if isinstance(sharpness, dict) else sharpness
-                        if url:
-                            return url
-                elif isinstance(live_detail, str) and live_detail.startswith('http'):
-                    return live_detail
+            if isinstance(live_details, dict):
+                # 直接返回 redirect 或 uRL 字段中的 URL
+                for key in ('line_sharpness', 'redirect', 'uRL', 'url'):
+                    val = live_details.get(key)
+                    if isinstance(val, str) and val.startswith('http'):
+                        return val
+                    if isinstance(val, list):
+                        for item in val:
+                            if isinstance(item, dict):
+                                url = item.get('url', '')
+                                if url and url.startswith('http'):
+                                    return url
+                            elif isinstance(item, str) and item.startswith('http'):
+                                return item
+            elif isinstance(live_details, list):
+                for item in live_details:
+                    if isinstance(item, dict):
+                        for sharpness in item.get('line_sharpness', []):
+                            url = sharpness.get('url') if isinstance(sharpness, dict) else sharpness
+                            if url and url.startswith('http'):
+                                return url
+                    elif isinstance(item, str) and item.startswith('http'):
+                        return item
         except Exception as e:
             logger.error(f"获取直播回放URL时出错: {str(e)}")
         return None

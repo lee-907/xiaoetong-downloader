@@ -34,7 +34,7 @@ def check_cookie_valid(cookie: str, app_id: str, user_agent: str) -> bool:
         return False
 
 
-def qrcode_login(app_id: str, user_agent: str) -> str:
+def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
     """Playwright 打开微信登录页，用户扫码后返回 cookie 字符串"""
     from playwright.sync_api import sync_playwright
 
@@ -51,11 +51,9 @@ def qrcode_login(app_id: str, user_agent: str) -> str:
 
             # 勾选「已阅读并同意」复选框（二维码需要勾选后才显示）
             try:
-                # 等页面渲染完，尝试多种方式勾选
                 time.sleep(1)
                 checked = False
 
-                # 方式1: 找原生 checkbox input
                 checkbox = page.locator('input[type="checkbox"]').first
                 try:
                     checkbox.wait_for(state="attached", timeout=5000)
@@ -65,17 +63,12 @@ def qrcode_login(app_id: str, user_agent: str) -> str:
                 except Exception:
                     pass
 
-                # 方式2: 页面可能使用自定义组件，用 evaluate 勾选
                 if not checked:
                     try:
                         page.evaluate("""
                             () => {
                                 const cb = document.querySelector('input[type="checkbox"]');
-                                if (cb && !cb.checked) {
-                                    cb.click();
-                                    return true;
-                                }
-                                // 尝试找 el-checkbox 组件
+                                if (cb && !cb.checked) { cb.click(); return true; }
                                 const el = document.querySelector('.el-checkbox');
                                 if (el) el.click();
                                 return true;
@@ -86,7 +79,6 @@ def qrcode_login(app_id: str, user_agent: str) -> str:
                     except Exception:
                         pass
 
-                # 方式3: 点击 label 左侧（避开协议链接文字）
                 if not checked:
                     label = page.locator("label").filter(has_text="已阅读并同意").first
                     label.wait_for(state="visible", timeout=5000)
@@ -101,7 +93,7 @@ def qrcode_login(app_id: str, user_agent: str) -> str:
             except Exception:
                 logger.warning("未能自动勾选协议复选框，请手动勾选后扫码")
 
-            # 等待二维码 canvas 出现，截取二维码元素
+            # 截取二维码
             try:
                 canvas = page.wait_for_selector("canvas", timeout=10000)
                 if canvas:
@@ -112,7 +104,7 @@ def qrcode_login(app_id: str, user_agent: str) -> str:
             logger.info("正在打开二维码图片...")
             subprocess.run(['open', 'qrcode.png'], check=False)
 
-            # 等待扫码后页面跳转（离开微信登录页）
+            # 等待扫码后跳转
             try:
                 page.wait_for_url(
                     lambda url: '/wx' not in url and url != LOGIN_PAGE and 'login' not in url.lower(),
@@ -123,16 +115,16 @@ def qrcode_login(app_id: str, user_agent: str) -> str:
                 logger.error("等待扫码超时（2分钟），请重试")
                 return ""
 
-            # 跳转到课程域名触发跨域 SSO，确保 xiaoeknow.com 的 cookie 被种下
-            logger.info("正在同步登录态到课程域...")
+            # 导航到课程页面，完成跨域 SSO
+            logger.info("正在同步登录态...")
             time.sleep(2)
-            app_domain = f"https://{app_id}.h5.xiaoeknow.com"
+            course_url = f"https://{app_id}.h5.xiaoeknow.com/p/course/{product_id}"
             try:
-                page.goto(app_domain, wait_until="domcontentloaded", timeout=15000)
+                page.goto(course_url, wait_until="domcontentloaded", timeout=15000)
                 time.sleep(3)
-                logger.info(f"✓ 已访问 {app_domain}")
+                logger.info(f"✓ 已访问课程页 {course_url}")
             except Exception as e:
-                logger.warning(f"访问课程域失败: {e}")
+                logger.warning(f"访问课程页失败: {e}")
 
             # 提取所有 cookie
             all_cookies = context.cookies()
