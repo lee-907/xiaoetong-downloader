@@ -274,6 +274,9 @@ class XiaoetDownloadManager:
         """获取播放URL"""
         try:
             video_details = self.api_client.get_video_detail_info(resource.resource_id, product_id)
+            if not video_details:
+                logger.warning(f"无法获取视频 {resource.title} 的详情信息")
+                return None
             play_sign = video_details.get('play_sign')
 
             if not play_sign:
@@ -315,8 +318,13 @@ class XiaoetDownloadManager:
         try:
             live_details = self.api_client.get_lookback_detail_info(resource.resource_id)
             for live_detail in live_details:
-                for sharpness in live_detail.get('line_sharpness', []):
-                    return sharpness.get('url')
+                if isinstance(live_detail, dict):
+                    for sharpness in live_detail.get('line_sharpness', []):
+                        url = sharpness.get('url') if isinstance(sharpness, dict) else sharpness
+                        if url:
+                            return url
+                elif isinstance(live_detail, str):
+                    return live_detail
         except Exception as e:
             logger.error(f"获取直播回放URL时出错: {str(e)}")
         return None
