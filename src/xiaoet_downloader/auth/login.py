@@ -120,8 +120,14 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
             logger.info("正在同步登录态...")
             time.sleep(2)
 
-            # 先导航到课程页面，让浏览器自然完成 SSO 重定向
-            course_url = f"https://{app_id}.h5.xiaoeknow.com/p/course/{product_id}"
+            # 根据 product_id 前缀构造正确 URL: course_ → ecourse, p_ → column
+            if product_id.startswith('course_'):
+                path = 'ecourse'
+            elif product_id.startswith('p_'):
+                path = 'column'
+            else:
+                path = 'ecourse'
+            course_url = f"https://{app_id}.h5.xiaoeknow.com/p/course/{path}/{product_id}"
             try:
                 page.goto(course_url, wait_until="domcontentloaded", timeout=30000)
                 time.sleep(3)
