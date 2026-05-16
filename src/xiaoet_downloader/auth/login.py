@@ -120,20 +120,29 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
             logger.info("正在同步登录态...")
             time.sleep(2)
 
-            # 根据 product_id 前缀构造正确 URL: course_ → ecourse, p_ → column
+            # 根据 product_id 前缀构造正确 URL
             if product_id.startswith('course_'):
                 path = 'ecourse'
             elif product_id.startswith('p_'):
                 path = 'column'
             else:
                 path = 'ecourse'
-            course_url = f"https://{app_id}.h5.xiaoeknow.com/p/course/{path}/{product_id}"
+            course_url = (
+                f"https://{app_id}.h5.xiaoeknow.com/p/course/{path}/{product_id}"
+                f"?l_program=xe_know_pc&sub_course_list_mode=0"
+            )
             try:
-                page.goto(course_url, wait_until="domcontentloaded", timeout=30000)
-                time.sleep(3)
+                # 导航到课程页，等待 SSO 重定向链完成
+                page.goto(course_url, wait_until="networkidle", timeout=60000)
+                time.sleep(2)
+                # 如果仍停留在 auth 页面，再等待一段时间
+                if 'login/auth' in page.url:
+                    logger.info("等待 SSO 重定向...")
+                    page.wait_for_url(lambda u: 'login/auth' not in u, timeout=30000)
+                    time.sleep(2)
                 logger.info(f"已访问课程页，当前 URL: {page.url}")
             except Exception as e:
-                logger.warning(f"访问课程页失败: {e}")
+                logger.warning(f"访问课程页失败（可能已部分完成）: {e}")
 
             # 提取所有 cookie
             all_cookies = context.cookies()
