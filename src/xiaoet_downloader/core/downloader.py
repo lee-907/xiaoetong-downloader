@@ -190,9 +190,11 @@ class VideoDownloader:
         if not segment_url.startswith('http'):
             segment_url = url_prefix + segment_url
 
+        last_status = None
         for retry_count in range(max_retries):
             try:
                 response = self.session.get(segment_url, timeout=30)
+                last_status = response.status_code
                 if response.status_code == 200:
                     temp_file = ts_file + '.tmp'
                     with open(temp_file, 'wb') as f:
@@ -206,7 +208,7 @@ class VideoDownloader:
                 if retry_count < max_retries - 1:
                     time.sleep(1)
 
-        logger.warning(f"[{current}/{total}] 达到最大重试次数，下载失败")
+        logger.warning(f"[{current}/{total}] 下载失败 (HTTP {last_status}): {segment_url[:120]}")
         return False
 
     def download_document(self, document_url: str, document_file: str, max_retries: int = 3) -> bool:
