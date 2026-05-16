@@ -37,10 +37,10 @@ def qrcode_login(user_agent: str) -> str:
     """Playwright 打开微信登录页，用户扫码后返回 cookie 字符串"""
     from playwright.sync_api import sync_playwright
 
-    logger.info("正在启动浏览器获取登录二维码...")
+    logger.info("正在后台获取登录二维码...")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(user_agent=user_agent)
         page = context.new_page()
 
@@ -100,17 +100,17 @@ def qrcode_login(user_agent: str) -> str:
             except Exception:
                 logger.warning("未能自动勾选协议复选框，请手动勾选后扫码")
 
-            # 等待二维码 canvas 出现
+            # 等待二维码 canvas 出现，截取二维码元素
             try:
-                page.wait_for_selector("canvas", timeout=10000)
+                canvas = page.wait_for_selector("canvas", timeout=10000)
+                if canvas:
+                    canvas.screenshot(path="qrcode.png")
             except Exception:
-                pass
+                page.screenshot(path="qrcode.png")
 
-            # 截图二维码
-            page.screenshot(path="qrcode.png")
-            logger.info("=" * 50)
-            logger.info("请打开 qrcode.png 查看微信登录二维码并用微信扫码")
-            logger.info("=" * 50)
+            logger.info("正在打开二维码图片...")
+            import subprocess
+            subprocess.run(['open', 'qrcode.png'], check=False)
 
             # 等待扫码后跳转到首页
             try:
