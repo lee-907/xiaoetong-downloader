@@ -12,6 +12,7 @@ class XiaoetConfig:
     """小鹅通配置类"""
     app_id: str
     cookie: str
+    user_agent: str = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
     products: list = field(default_factory=list)
     download_dir: str = 'download'
     filter: list = field(default_factory=list)
@@ -38,9 +39,15 @@ class XiaoetConfig:
             if not os.path.isabs(download_dir):
                 download_dir = os.path.abspath(download_dir)
 
+            user_agent = config_data.get(
+                'user_agent',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+            )
+
             return cls(
                 app_id=config_data.get('app_id', ''),
                 cookie=config_data.get('cookie', ''),
+                user_agent=user_agent,
                 products=products,
                 download_dir=download_dir,
                 filter=config_data.get('filter', []),
@@ -58,7 +65,7 @@ class XiaoetConfig:
         if not self.app_id:
             raise ValueError("app_id 不能为空")
         if not self.cookie:
-            raise ValueError("cookie 不能为空")
+            raise ValueError("cookie 不能为空，可通过扫码登录自动获取")
         if not self.products:
             raise ValueError("products 不能为空")
         for i, p in enumerate(self.products):
@@ -73,6 +80,7 @@ class XiaoetConfig:
         return {
             'app_id': self.app_id,
             'cookie': self.cookie,
+            'user_agent': self.user_agent,
             'products': self.products,
             'download_dir': self.download_dir,
             'max_workers': self.max_workers

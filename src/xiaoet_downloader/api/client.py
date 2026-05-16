@@ -25,7 +25,7 @@ class XiaoetAPIClient:
         self.config = config
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+            'User-Agent': config.user_agent
         })
     
     def get_micro_navigation_info(self) -> Dict[str, Any]:

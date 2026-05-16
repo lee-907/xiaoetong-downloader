@@ -1,6 +1,7 @@
 {
   "app_id": "your_app_id_here",
-  "cookie": "your_cookie_here",
+  "cookie": "",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   "products": [
     {
       "product_name": "课程名称",

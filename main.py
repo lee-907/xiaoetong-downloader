@@ -93,7 +93,30 @@ def main():
             logger.info("请创建配置文件，参考 config.json.example")
             return 1
 
+        import json
+        from xiaoet_downloader.auth.login import check_cookie_valid, qrcode_login
+
         config = XiaoetConfig.from_file(args.config)
+
+        # 检查 cookie 有效性
+        if not check_cookie_valid(config.cookie, config.app_id, config.user_agent):
+            logger.info("Cookie 无效或已过期，需要重新登录")
+            new_cookie = qrcode_login(config.user_agent)
+            if not new_cookie:
+                logger.error("登录失败，请重试")
+                return 1
+
+            # 更新内存中的 config
+            config.cookie = new_cookie
+
+            # 写回配置文件
+            with open(args.config, 'r', encoding='utf-8') as f:
+                cfg_json = json.load(f)
+            cfg_json['cookie'] = new_cookie
+            with open(args.config, 'w', encoding='utf-8') as f:
+                json.dump(cfg_json, f, ensure_ascii=False, indent=2)
+            logger.info("✓ Cookie 已更新到配置文件")
+
         manager = XiaoetDownloadManager(config)
 
         # 检查环境
