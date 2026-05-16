@@ -144,6 +144,7 @@ class XiaoetAPIClient:
         }
         headers = {
             'cookie': self.config.cookie,
+            'Referer': f'https://{self.config.app_id}.h5.xiaoeknow.com/',
         }
 
         try:
