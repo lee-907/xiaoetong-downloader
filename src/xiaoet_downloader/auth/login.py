@@ -48,14 +48,57 @@ def qrcode_login(user_agent: str) -> str:
             page.goto(LOGIN_PAGE, wait_until="domcontentloaded", timeout=30000)
             time.sleep(2)
 
-            # 点击「已阅读并同意」复选框，使二维码出现
+            # 勾选「已阅读并同意」复选框（二维码需要勾选后才显示）
             try:
-                agree_checkbox = page.locator("label").filter(has_text="已阅读并同意")
-                agree_checkbox.wait_for(state="visible", timeout=10000)
-                agree_checkbox.click()
-                logger.info("✓ 已勾选协议复选框")
+                # 等页面渲染完，尝试多种方式勾选
+                time.sleep(1)
+                checked = False
+
+                # 方式1: 找原生 checkbox input
+                checkbox = page.locator('input[type="checkbox"]').first
+                try:
+                    checkbox.wait_for(state="attached", timeout=5000)
+                    checkbox.check(force=True)
+                    checked = True
+                    logger.info("✓ 已勾选协议复选框 (input)")
+                except Exception:
+                    pass
+
+                # 方式2: 页面可能使用自定义组件，用 evaluate 勾选
+                if not checked:
+                    try:
+                        page.evaluate("""
+                            () => {
+                                const cb = document.querySelector('input[type="checkbox"]');
+                                if (cb && !cb.checked) {
+                                    cb.click();
+                                    return true;
+                                }
+                                // 尝试找 el-checkbox 组件
+                                const el = document.querySelector('.el-checkbox');
+                                if (el) el.click();
+                                return true;
+                            }
+                        """)
+                        checked = True
+                        logger.info("✓ 已勾选协议复选框 (js)")
+                    except Exception:
+                        pass
+
+                # 方式3: 点击 label 左侧（避开协议链接文字）
+                if not checked:
+                    label = page.locator("label").filter(has_text="已阅读并同意").first
+                    label.wait_for(state="visible", timeout=5000)
+                    box = label.bounding_box()
+                    if box:
+                        page.mouse.click(box['x'] + 15, box['y'] + box['height'] / 2)
+                        checked = True
+                        logger.info("✓ 已勾选协议复选框 (label+offset)")
+
+                if not checked:
+                    raise Exception("所有方式均失败")
             except Exception:
-                logger.warning("未能自动勾选协议复选框，请手动勾选")
+                logger.warning("未能自动勾选协议复选框，请手动勾选后扫码")
 
             # 等待二维码 canvas 出现
             try:
