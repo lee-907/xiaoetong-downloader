@@ -29,7 +29,8 @@ def check_cookie_valid(cookie: str, app_id: str, user_agent: str) -> bool:
         if resp.status_code != 200:
             return False
         data = resp.json()
-        return data.get('code') == 0 and data.get('data', {}).get('user_id')
+        user_id = data.get('data', {}).get('user_id', '')
+        return data.get('code') == 0 and user_id and not user_id.startswith('anonymous')
     except Exception:
         return False
 
@@ -115,21 +116,43 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
                 logger.error("等待扫码超时（5分钟），请重试")
                 return ""
 
-            # 导航到课程域，通过 SSO auth 链接完成跨域认证
+            # 在浏览器中调 API 验证登录态，同时完成跨域认证
             logger.info("正在同步登录态...")
             time.sleep(2)
 
-            # 构造 SSO auth URL（与 API 返回的 redirect 格式一致）
-            auth_url = (
-                f"https://{app_id}.h5.xiaoeknow.com/p/t/free/v1/basic-platform/"
-                f"h5_basic/login/auth?redirect_url=https%3A%2F%2F{app_id}.h5.xiaoeknow.com"
-            )
+            nav_url = f"https://{app_id}.h5.xiaoeknow.com/xe.micro_page.navigation.get/1.0.0"
+            nav_body = json.dumps({"app_id": app_id, "agent_type": 1, "app_version": 0})
+
+            # 用浏览器 fetch 调 API，自动处理 cookie 和重定向
+            result = page.evaluate("""
+                async ([url, body]) => {
+                    const resp = await fetch(url, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: body
+                    });
+                    const text = await resp.text();
+                    return {status: resp.status, body: text};
+                }
+            """, [nav_url, nav_body])
+
+            user_id = ""
             try:
-                page.goto(auth_url, wait_until="networkidle", timeout=30000)
-                time.sleep(3)
-                logger.info(f"SSO 完成，当前 URL: {page.url}")
-            except Exception as e:
-                logger.warning(f"SSO 失败: {e}")
+                data = json.loads(result['body'])
+                user_id = data.get('data', {}).get('user_id', '')
+                logger.info(f"API 返回 user_id: {user_id}")
+            except Exception:
+                logger.warning(f"API 返回非 JSON: {result.get('body', '')[:200]}")
+
+            if not user_id or user_id.startswith('anonymous'):
+                # 如果仍是匿名用户，导航课程页面触发 SSO
+                course_url = f"https://{app_id}.h5.xiaoeknow.com/p/course/{product_id}"
+                try:
+                    page.goto(course_url, wait_until="load", timeout=30000)
+                    time.sleep(3)
+                    logger.info(f"已访问课程页，当前 URL: {page.url}")
+                except Exception as e:
+                    logger.warning(f"访问课程页失败: {e}")
 
             # 提取所有 cookie
             all_cookies = context.cookies()
