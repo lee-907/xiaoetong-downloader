@@ -98,12 +98,10 @@ class XiaoetDownloadManager:
                             Resource(resource_id, resource_title), True, "已下载"
                         ))
                         if resource_id.startswith('l_'):
-                            ppt_dir = os.path.join(course_dir, FileUtils.sanitize_filename(resource_title), 'ppt')
-                            if not os.path.exists(ppt_dir):
-                                self._download_ppt_images(
-                                    Resource(resource_id, resource_title, ResourceType.LIVE),
-                                    course_dir, user_id
-                                )
+                            self._download_ppt_images(
+                                Resource(resource_id, resource_title, ResourceType.LIVE),
+                                course_dir, user_id
+                            )
                         continue
 
                     if resource_title in self.config.filter:

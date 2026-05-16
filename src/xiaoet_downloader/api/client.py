@@ -218,13 +218,13 @@ class XiaoetAPIClient:
         }
         images = []
         seen = set()
-        load_order = 1
+        cursor = ''
         while True:
             body = {
-                'load_order': load_order,
+                'load_order': 1,
                 'info_type': 0,
-                'comment_id': '',
-                'size': 20,
+                'comment_id': cursor,
+                'size': 50,
                 'alive_id': resource_id,
                 'room_id': room_id,
                 'app_id': self.config.app_id,
@@ -248,7 +248,8 @@ class XiaoetAPIClient:
                                     images.append(img_url)
                         except (json.JSONDecodeError, TypeError):
                             pass
-                load_order += 1
+                # 用最后一条消息的 id 作为下一页游标
+                cursor = str(msgs[-1].get('id', ''))
             except Exception:
                 break
         return images
