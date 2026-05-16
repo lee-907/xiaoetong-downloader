@@ -217,9 +217,11 @@ class XiaoetAPIClient:
             'Content-Type': 'application/json',
         }
         images = []
-        seen = set()
+        seen_urls = set()
+        seen_msg_ids = set()
         cursor = ''
-        while True:
+        max_pages = 20
+        for _ in range(max_pages):
             body = {
                 'load_order': 1,
                 'info_type': 0,
@@ -237,18 +239,21 @@ class XiaoetAPIClient:
                 msgs = response.json().get('data', {}).get('msgs', []) or []
                 if not msgs:
                     break
-                for msg in msgs:
+                new_msgs = [m for m in msgs if m.get('id') not in seen_msg_ids]
+                if not new_msgs:
+                    break
+                for msg in new_msgs:
+                    seen_msg_ids.add(msg.get('id'))
                     if msg.get('content_type') == 2:
                         try:
                             urls = json.loads(msg.get('org_msg_content', '[]'))
                             for item in urls:
                                 img_url = item.get('DownUrl', '')
-                                if img_url and img_url not in seen:
-                                    seen.add(img_url)
+                                if img_url and img_url not in seen_urls:
+                                    seen_urls.add(img_url)
                                     images.append(img_url)
                         except (json.JSONDecodeError, TypeError):
                             pass
-                # 用最后一条消息的 id 作为下一页游标
                 cursor = str(msgs[-1].get('id', ''))
             except Exception:
                 break
