@@ -69,7 +69,9 @@ class VideoDownloader:
 
             url_prefix = self._get_url_prefix(play_url)
             total_segments = len(media.data['segments'])
-
+            first_uri = media.data['segments'][0].get('uri', '')
+            logger.warning(f"[DEBUG] play_url: {play_url[:300]}")
+            logger.warning(f"[DEBUG] url_prefix: {url_prefix}, first_uri: {first_uri}")
             logger.info(f"总计 {total_segments} 个视频片段")
 
             # 预扫描：区分已缓存和需下载的片段
