@@ -216,37 +216,41 @@ class XiaoetAPIClient:
             'cookie': self.config.cookie,
             'Content-Type': 'application/json',
         }
-        body = {
-            'load_order': 1,
-            'info_type': 0,
-            'comment_id': '',
-            'size': 200,
-            'alive_id': resource_id,
-            'room_id': room_id,
-            'app_id': self.config.app_id,
-            'load_history': 0,
-            'user_id': user_id,
-        }
-        try:
-            response = requests.post(url, headers=headers, json=body)
-            response.raise_for_status()
-            msgs = response.json().get('data', {}).get('msgs', []) or []
-            images = []
-            seen = set()
-            for msg in msgs:
-                if msg.get('content_type') == 2:
-                    # PPT 图片消息，org_msg_content 是 JSON 数组
-                    try:
-                        urls = json.loads(msg.get('org_msg_content', '[]'))
-                        for item in urls:
-                            img_url = item.get('DownUrl', '')
-                            if img_url and img_url not in seen:
-                                seen.add(img_url)
-                                images.append(img_url)
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-            return images
-        except Exception as e:
-            raise Exception(f"获取互动图片失败: {str(e)}")
+        images = []
+        seen = set()
+        load_order = 1
+        while True:
+            body = {
+                'load_order': load_order,
+                'info_type': 0,
+                'comment_id': '',
+                'size': 20,
+                'alive_id': resource_id,
+                'room_id': room_id,
+                'app_id': self.config.app_id,
+                'load_history': 1,
+                'user_id': user_id,
+            }
+            try:
+                response = requests.post(url, headers=headers, json=body)
+                response.raise_for_status()
+                msgs = response.json().get('data', {}).get('msgs', []) or []
+                if not msgs:
+                    break
+                for msg in msgs:
+                    if msg.get('content_type') == 2:
+                        try:
+                            urls = json.loads(msg.get('org_msg_content', '[]'))
+                            for item in urls:
+                                img_url = item.get('DownUrl', '')
+                                if img_url and img_url not in seen:
+                                    seen.add(img_url)
+                                    images.append(img_url)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                load_order += 1
+            except Exception:
+                break
+        return images
         
         return None, None
