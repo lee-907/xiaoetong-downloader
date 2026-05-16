@@ -280,12 +280,16 @@ class XiaoetDownloadManager:
                     manifest = DownloadManifest.load(course_dir, matched_product['product_id'])
                     manifest.mark_completed(resource_id, resource.title, result.file_path, resource_type.value)
                     manifest.save()
+                    if resource_type == ResourceType.LIVE:
+                        self._download_ppt_images(resource, course_dir, user_id)
                 return result
 
             if download_result.success:
                 manifest = DownloadManifest.load(course_dir, matched_product['product_id'])
                 manifest.mark_completed(resource_id, resource.title, download_result.file_path, resource_type.value)
                 manifest.save()
+                if resource_type == ResourceType.LIVE:
+                    self._download_ppt_images(resource, course_dir, user_id)
 
             return download_result
 
