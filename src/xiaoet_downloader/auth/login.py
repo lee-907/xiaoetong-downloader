@@ -112,13 +112,15 @@ def qrcode_login(user_agent: str) -> str:
             import subprocess
             subprocess.run(['open', 'qrcode.png'], check=False)
 
-            # 等待扫码后跳转到首页
+            # 等待扫码后页面跳转（离开微信登录页）
             try:
-                page.wait_for_url("**/home**", timeout=120000)
+                page.wait_for_url(
+                    lambda url: '/wx' not in url and url != LOGIN_PAGE and 'login' not in url.lower(),
+                    timeout=120000
+                )
                 logger.info("✓ 扫码成功，页面已跳转")
             except Exception:
                 logger.error("等待扫码超时（2分钟），请重试")
-                browser.close()
                 return ""
 
             time.sleep(2)
