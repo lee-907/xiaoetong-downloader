@@ -48,7 +48,7 @@ class VideoDownloader:
         if not play_url:
             return DownloadResult(resource, False, "无效的播放地址")
 
-        resource_dir = os.path.join(download_dir, resource.resource_id)
+        resource_dir = os.path.join(download_dir, FileUtils.sanitize_filename(resource.title))
         FileUtils.ensure_dir(resource_dir)
 
         try:

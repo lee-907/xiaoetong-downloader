@@ -24,7 +24,7 @@ class VideoTranscoder:
         @param index: 章节下标
         @return: 合并结果
         """
-        resource_dir = os.path.join(path, resource.resource_id)
+        resource_dir = os.path.join(path, FileUtils.sanitize_filename(resource.title))
         metadata_file = os.path.join(resource_dir, 'metadata.json')
 
         if not os.path.exists(resource_dir) or not os.path.exists(metadata_file):
