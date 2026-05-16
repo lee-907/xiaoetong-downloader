@@ -323,7 +323,7 @@ class XiaoetDownloadManager:
                         url = sharpness.get('url') if isinstance(sharpness, dict) else sharpness
                         if url:
                             return url
-                elif isinstance(live_detail, str):
+                elif isinstance(live_detail, str) and live_detail.startswith('http'):
                     return live_detail
         except Exception as e:
             logger.error(f"获取直播回放URL时出错: {str(e)}")
