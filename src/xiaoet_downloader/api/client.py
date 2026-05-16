@@ -27,6 +27,14 @@ class XiaoetAPIClient:
         self.session.headers.update({
             'User-Agent': config.user_agent
         })
+        # 将 cookie 注入 session 的 cookie jar，服务器 Set-Cookie 会被自动保存
+        if config.cookie:
+            for pair in config.cookie.split('; '):
+                if '=' in pair:
+                    name, _, value = pair.partition('=')
+                    self.session.cookies.set(name, value, domain='.xiaoeknow.com')
+                    self.session.cookies.set(name, value, domain='.xiaoe-tech.com')
+                    self.session.cookies.set(name, value, domain='.xet.citv.cn')
     
     def get_micro_navigation_info(self) -> Dict[str, Any]:
         """获取微页面导航信息"""
@@ -37,7 +45,7 @@ class XiaoetAPIClient:
             "app_version": 0
         })
         headers = {
-            'cookie': self.config.cookie,
+            # cookie 由 session jar 自动管理
             'Content-Type': 'application/json'
         }
         
@@ -66,7 +74,7 @@ class XiaoetAPIClient:
         }
 
         headers = {
-            'cookie': self.config.cookie,
+            # cookie 由 session jar 自动管理
         }
         
         try:
@@ -98,7 +106,7 @@ class XiaoetAPIClient:
             'bizData[opr_sys]': 'Win32'
         }
         headers = {
-            'cookie': self.config.cookie,
+            # cookie 由 session jar 自动管理
         }
         
         try:
@@ -121,7 +129,7 @@ class XiaoetAPIClient:
             }
         }
         headers = {
-            'cookie': self.config.cookie,
+            # cookie 由 session jar 自动管理
         }
 
         try:
@@ -143,7 +151,7 @@ class XiaoetAPIClient:
             "protection": "0"
         }
         headers = {
-            'cookie': self.config.cookie,
+            # cookie 由 session jar 自动管理
             'Referer': f'https://{self.config.app_id}.h5.xiaoeknow.com/',
         }
 
@@ -168,7 +176,7 @@ class XiaoetAPIClient:
             "opr_sys": "MacIntel"
         })
         headers = {
-            'cookie': self.config.cookie,
+            # cookie 由 session jar 自动管理
             'Content-Type': 'application/json'
         }
         
