@@ -29,9 +29,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用示例:
-  python main.py                           # 下载整个课程
+  python main.py                           # 下载所有课程
+  python main.py --login                   # 仅扫码登录，保存 cookie 后退出
   python main.py --single v_123456        # 下载单个视频
   python main.py --config custom.json     # 使用自定义配置文件
+  python main.py --force                  # 忽略清单强制全量下载
   python main.py --no-cache               # 忽略缓存重新下载
   python main.py --no-transcode           # 只下载不转码
   python main.py --check                  # 检查运行环境
@@ -71,6 +73,12 @@ def main():
         '--check',
         action='store_true',
         help='检查运行环境'
+    )
+
+    parser.add_argument(
+        '--login',
+        action='store_true',
+        help='仅执行微信扫码登录，保存 cookie 后退出'
     )
 
     parser.add_argument(
@@ -117,6 +125,11 @@ def main():
             with open(args.config, 'w', encoding='utf-8') as f:
                 json.dump(cfg_json, f, ensure_ascii=False, indent=2)
             logger.info("✓ Cookie 已更新到配置文件")
+
+        # 仅登录模式
+        if args.login:
+            logger.info("登录完成")
+            return 0
 
         manager = XiaoetDownloadManager(config)
 

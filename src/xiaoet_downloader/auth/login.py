@@ -112,7 +112,7 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
                 )
                 logger.info("✓ 扫码成功，页面已跳转")
             except Exception:
-                logger.error("等待扫码超时（2分钟），请重试")
+                logger.error("等待扫码超时（5分钟），请重试")
                 return ""
 
             # 导航到课程域，通过 SSO auth 链接完成跨域认证
