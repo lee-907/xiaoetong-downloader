@@ -26,8 +26,7 @@ class VideoDownloader:
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': config.user_agent,
-            'Referer': f'https://{config.app_id}.h5.xiaoeknow.com/',
-            'Cookie': config.cookie
+            'Referer': f'https://{config.app_id}.h5.xiaoeknow.com/'
         })
 
     def download_m3u8_video(self, resource: Resource, play_url: str,
