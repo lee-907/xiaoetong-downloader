@@ -101,7 +101,7 @@ def main():
         # 检查 cookie 有效性
         if not check_cookie_valid(config.cookie, config.app_id, config.user_agent):
             logger.info("Cookie 无效或已过期，需要重新登录")
-            new_cookie = qrcode_login(config.user_agent)
+            new_cookie = qrcode_login(config.app_id, config.user_agent)
             if not new_cookie:
                 logger.error("登录失败，请重试")
                 return 1

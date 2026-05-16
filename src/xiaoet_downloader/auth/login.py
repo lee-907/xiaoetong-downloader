@@ -34,7 +34,7 @@ def check_cookie_valid(cookie: str, app_id: str, user_agent: str) -> bool:
         return False
 
 
-def qrcode_login(user_agent: str) -> str:
+def qrcode_login(app_id: str, user_agent: str) -> str:
     """Playwright 打开微信登录页，用户扫码后返回 cookie 字符串"""
     from playwright.sync_api import sync_playwright
 
@@ -123,26 +123,22 @@ def qrcode_login(user_agent: str) -> str:
                 logger.error("等待扫码超时（2分钟），请重试")
                 return ""
 
-            # 跳转到小鹅通域触发跨域 SSO，确保 xiaoeknow.com 的 cookie 被种下
-            logger.info("正在同步登录态...")
+            # 跳转到课程域名触发跨域 SSO，确保 xiaoeknow.com 的 cookie 被种下
+            logger.info("正在同步登录态到课程域...")
             time.sleep(2)
+            app_domain = f"https://{app_id}.h5.xiaoeknow.com"
             try:
-                page.goto("https://h5.xiaoeknow.com", wait_until="domcontentloaded", timeout=15000)
-                time.sleep(2)
-            except Exception:
-                pass
+                page.goto(app_domain, wait_until="domcontentloaded", timeout=15000)
+                time.sleep(3)
+                logger.info(f"✓ 已访问 {app_domain}")
+            except Exception as e:
+                logger.warning(f"访问课程域失败: {e}")
 
-            # 提取所有 cookie（过滤只保留相关域名）
+            # 提取所有 cookie
             all_cookies = context.cookies()
-            relevant_domains = ['xiaoeknow.com', 'xiaoe-tech.com', 'h5.xiaoeknow.com', 'h5.xet.citv.cn']
-            filtered = [
-                c for c in all_cookies
-                if any(d in (c.get('domain', '')) for d in relevant_domains)
-            ]
-            if not filtered:
-                filtered = all_cookies  # fallback: 全取
-            cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in filtered)
-            logger.info(f"✓ 获取到 {len(filtered)} 个 cookie (共 {len(all_cookies)} 个)")
+            cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in all_cookies)
+            domains = set(c.get('domain', '') for c in all_cookies)
+            logger.info(f"✓ 获取到 {len(all_cookies)} 个 cookie，覆盖域: {domains}")
 
             return cookie_str
 
