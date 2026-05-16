@@ -48,7 +48,9 @@ class VideoDownloader:
         if not play_url:
             return DownloadResult(resource, False, "无效的播放地址")
 
-        resource_dir = os.path.join(download_dir, FileUtils.sanitize_filename(resource.title))
+        # TS 缓存放在课程目录下的 cache/ 子目录
+        lesson_dir = os.path.join(download_dir, FileUtils.sanitize_filename(resource.title))
+        resource_dir = os.path.join(lesson_dir, 'cache')
         FileUtils.ensure_dir(resource_dir)
 
         try:
@@ -156,7 +158,7 @@ class VideoDownloader:
 
             if complete:
                 logger.info(f"视频下载完成: {resource.title}")
-                return DownloadResult(resource, True, "下载完成", resource_dir)
+                return DownloadResult(resource, True, "下载完成", lesson_dir)
             else:
                 logger.warning(f"视频下载不完整: {resource.title} ({downloaded_count}/{total_segments})")
                 return DownloadResult(resource, False, f"下载不完整 ({downloaded_count}/{total_segments})")

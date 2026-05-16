@@ -25,11 +25,12 @@ class VideoTranscoder:
         @param index: 章节下标
         @return: 合并结果
         """
-        resource_dir = os.path.join(path, FileUtils.sanitize_filename(resource.title))
-        metadata_file = os.path.join(resource_dir, 'metadata.json')
+        lesson_dir = os.path.join(path, FileUtils.sanitize_filename(resource.title))
+        cache_dir = os.path.join(lesson_dir, 'cache')
+        metadata_file = os.path.join(cache_dir, 'metadata.json')
 
-        if not os.path.exists(resource_dir) or not os.path.exists(metadata_file):
-            return DownloadResult(resource, False, "资源目录或元数据不存在")
+        if not os.path.exists(cache_dir) or not os.path.exists(metadata_file):
+            return DownloadResult(resource, False, "缓存目录或元数据不存在")
 
         try:
             # 加载元数据
@@ -47,7 +48,7 @@ class VideoTranscoder:
             if not safe_title:
                 safe_title = resource.resource_id
 
-            output_file = os.path.join(resource_dir, safe_title + '.mp4')
+            output_file = os.path.join(lesson_dir, safe_title + '.mp4')
 
             # 检查输出文件是否已存在
             if os.path.exists(output_file):
@@ -59,7 +60,7 @@ class VideoTranscoder:
             logger.info(f"开始合并视频: {safe_title}")
 
             # 使用ffmpy进行视频合并
-            input_file = os.path.join(resource_dir, 'video.m3u8')
+            input_file = os.path.join(cache_dir, 'video.m3u8')
             ff = ffmpy.FFmpeg(
                 inputs={input_file: ['-protocol_whitelist', 'crypto,file,http,https,tcp,tls']},
                 outputs={output_file: "-c:v copy -c:a copy"}
@@ -73,10 +74,10 @@ class VideoTranscoder:
                 resource.download_status = DownloadStatus.COMPLETED
                 resource.file_path = output_file
                 logger.info(f"视频合并完成: {output_file}")
-                # 删除 TS 缓存目录
+                # 删除 cache 目录
                 try:
-                    shutil.rmtree(resource_dir)
-                    logger.info(f"已清理 TS 缓存: {resource_dir}")
+                    shutil.rmtree(cache_dir)
+                    logger.info(f"已清理缓存: {cache_dir}")
                 except Exception as e:
                     logger.warning(f"清理 TS 缓存失败: {e}")
                 return DownloadResult(resource, True, "合并完成", output_file)
