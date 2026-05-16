@@ -42,11 +42,11 @@ class VideoTranscoder:
                 return DownloadResult(resource, False, "视频下载不完整，无法合并")
 
             # 处理文件名，替换非法字符
-            safe_title = f"[{index}]-{FileUtils.sanitize_filename(metadata.title)}"
+            safe_title = FileUtils.sanitize_filename(metadata.title)
             if not safe_title:
                 safe_title = resource.resource_id
 
-            output_file = os.path.join(path, safe_title + '.mp4')
+            output_file = os.path.join(resource_dir, safe_title + '.mp4')
 
             # 检查输出文件是否已存在
             if os.path.exists(output_file):
