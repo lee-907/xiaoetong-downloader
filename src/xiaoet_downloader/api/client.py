@@ -186,9 +186,67 @@ class XiaoetAPIClient:
     def get_best_quality_url(self, play_list_dict: Dict[str, Any]) -> Optional[Tuple[str, str]]:
         """获取最佳质量的播放URL"""
         quality_order = ['1080p_hls', '720p_hls', '480p_hls', '360p_hls']
-        
+
         for quality in quality_order:
             if quality in play_list_dict and play_list_dict.get(quality, {}).get('play_url'):
                 return play_list_dict.get(quality, {}).get('play_url'), quality
+
+    def get_im_room_id(self, resource_id: str, user_id: str) -> Optional[str]:
+        """获取互动消息房间ID"""
+        url = f"https://{self.config.app_id}.h5.xiaoeknow.com/_alive/v3/im_sign_student"
+        params = {
+            'room_id': '', 'source': 'live_h5'
+        }
+        headers = {
+            'cookie': self.config.cookie,
+        }
+        try:
+            # 先试着不传 room_id 获取 im 信息
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            # 如果有 secondary_info 可以用它获取 room_id
+            return None  # room_id 需要从页面获取，这里返回 None
+        except Exception:
+            return None
+
+    def get_interaction_images(self, resource_id: str, room_id: str, user_id: str) -> List[str]:
+        """获取互动区的 PPT 图片 URL 列表"""
+        url = f"https://{self.config.app_id}.h5.xiaoeknow.com/_alive/bff_h5/msg/list"
+        headers = {
+            'cookie': self.config.cookie,
+            'Content-Type': 'application/json',
+        }
+        body = {
+            'load_order': 1,
+            'info_type': 0,
+            'comment_id': '',
+            'size': 200,
+            'alive_id': resource_id,
+            'room_id': room_id,
+            'app_id': self.config.app_id,
+            'load_history': 0,
+            'user_id': user_id,
+        }
+        try:
+            response = requests.post(url, headers=headers, json=body)
+            response.raise_for_status()
+            msgs = response.json().get('data', {}).get('msgs', []) or []
+            images = []
+            seen = set()
+            for msg in msgs:
+                if msg.get('content_type') == 2:
+                    # PPT 图片消息，org_msg_content 是 JSON 数组
+                    try:
+                        urls = json.loads(msg.get('org_msg_content', '[]'))
+                        for item in urls:
+                            img_url = item.get('DownUrl', '')
+                            if img_url and img_url not in seen:
+                                seen.add(img_url)
+                                images.append(img_url)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            return images
+        except Exception as e:
+            raise Exception(f"获取互动图片失败: {str(e)}")
         
         return None, None

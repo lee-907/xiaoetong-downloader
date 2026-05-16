@@ -162,6 +162,9 @@ class XiaoetDownloadManager:
                                 )
                                 manifest.save()
                                 results['success'].append(transcode_result)
+                                # 下载 PPT 图片
+                                if resource_type == ResourceType.LIVE:
+                                    self._download_ppt_images(resource, course_dir, user_id)
                             else:
                                 results['failed'].append(transcode_result)
                         elif download_result.success:
@@ -171,6 +174,8 @@ class XiaoetDownloadManager:
                             )
                             manifest.save()
                             results['success'].append(download_result)
+                            if resource_type == ResourceType.LIVE:
+                                self._download_ppt_images(resource, course_dir, user_id)
                         else:
                             results['failed'].append(download_result)
 
@@ -353,6 +358,33 @@ class XiaoetDownloadManager:
         except Exception as e:
             logger.error(f"获取直播回放URL时出错: {str(e)}")
         return None
+
+    def _download_ppt_images(self, resource: Resource, course_dir: str, user_id: str):
+        """下载直播互动区的 PPT 图片"""
+        room_id = 'XET#3ef612fbf00761c10'  # 固定 room_id，同 app 下复用
+        try:
+            images = self.api_client.get_interaction_images(
+                resource.resource_id, room_id, user_id
+            )
+            if not images:
+                return
+
+            lesson_dir = os.path.join(course_dir, FileUtils.sanitize_filename(resource.title))
+            ppt_dir = os.path.join(lesson_dir, 'ppt')
+            FileUtils.ensure_dir(ppt_dir)
+
+            logger.info(f"  下载 {len(images)} 张 PPT 图片...")
+            for i, img_url in enumerate(images):
+                ext = '.png'
+                if '.jpg' in img_url or '.jpeg' in img_url:
+                    ext = '.jpg'
+                img_file = os.path.join(ppt_dir, f'{i+1:02d}{ext}')
+                if os.path.exists(img_file):
+                    continue
+                self.downloader.download_document(img_url, img_file)
+            logger.info(f"  PPT 图片已保存到 {ppt_dir}")
+        except Exception as e:
+            logger.warning(f"下载 PPT 图片失败: {e}")
 
     def _print_summary(self, course_name: str, results: Dict[str, List[DownloadResult]]) -> None:
         """打印单个课程处理结果摘要"""
