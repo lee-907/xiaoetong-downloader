@@ -42,7 +42,7 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
     logger.info("正在后台获取登录二维码...")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         context = browser.new_context(user_agent=user_agent)
         page = context.new_page()
 
@@ -93,17 +93,6 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
                     raise Exception("所有方式均失败")
             except Exception:
                 logger.warning("未能自动勾选协议复选框，请手动勾选后扫码")
-
-            # 截取二维码
-            try:
-                canvas = page.wait_for_selector("canvas", timeout=10000)
-                if canvas:
-                    canvas.screenshot(path="qrcode.png")
-            except Exception:
-                page.screenshot(path="qrcode.png")
-
-            logger.info("正在打开二维码图片...")
-            subprocess.run(['open', 'qrcode.png'], check=False)
 
             # 等待扫码后跳转
             try:
