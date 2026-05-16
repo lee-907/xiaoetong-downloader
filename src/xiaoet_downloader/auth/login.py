@@ -108,7 +108,7 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
             try:
                 page.wait_for_url(
                     lambda url: '/wx' not in url and url != LOGIN_PAGE and 'login' not in url.lower(),
-                    timeout=120000
+                    timeout=300000
                 )
                 logger.info("✓ 扫码成功，页面已跳转")
             except Exception:
