@@ -69,9 +69,6 @@ class VideoDownloader:
 
             url_prefix = self._get_url_prefix(play_url)
             total_segments = len(media.data['segments'])
-            first_uri = media.data['segments'][0].get('uri', '')
-            logger.warning(f"[DEBUG] play_url: {play_url[:300]}")
-            logger.warning(f"[DEBUG] url_prefix: {url_prefix}, first_uri: {first_uri}")
             logger.info(f"总计 {total_segments} 个视频片段")
 
             # 预扫描：区分已缓存和需下载的片段
@@ -79,9 +76,12 @@ class VideoDownloader:
             pending_indices = []  # 需要下载的 index 列表
             downloaded_count = 0
 
+            # 保存原始 URI（用于下载），然后改为本地文件名（用于本地 m3u8）
+            original_uris = {}  # index -> original URI
             for index, segment in enumerate(media.data['segments']):
                 ts_file = os.path.join(resource_dir, f'v_{index}.ts')
-                segment['uri'] = f'v_{index}.ts'
+                original_uris[index] = segment['uri']  # 保存原始 URI（含鉴权参数）
+                segment['uri'] = f'v_{index}.ts'        # 本地 m3u8 用本地文件名
                 seg = Segment(base_uri=None, keyobject=find_key(segment.get('key', {}), media.keys), **segment)
                 segment_map[index] = seg
 
@@ -100,10 +100,11 @@ class VideoDownloader:
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     futures = {}
                     for index in pending_indices:
-                        segment = media.data['segments'][index]
+                        seg_data = dict(media.data['segments'][index])
+                        seg_data['uri'] = original_uris[index]  # 恢复原始 URI 用于下载
                         ts_file = os.path.join(resource_dir, f'v_{index}.ts')
                         future = executor.submit(
-                            self._download_segment, segment, ts_file, url_prefix,
+                            self._download_segment, seg_data, ts_file, url_prefix,
                             index + 1, total_segments
                         )
                         futures[future] = index
