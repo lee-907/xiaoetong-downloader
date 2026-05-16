@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+import subprocess
 import time
 import requests
 from ..utils.logger import logger
@@ -109,7 +110,6 @@ def qrcode_login(user_agent: str) -> str:
                 page.screenshot(path="qrcode.png")
 
             logger.info("正在打开二维码图片...")
-            import subprocess
             subprocess.run(['open', 'qrcode.png'], check=False)
 
             # 等待扫码后页面跳转（离开微信登录页）
@@ -123,12 +123,26 @@ def qrcode_login(user_agent: str) -> str:
                 logger.error("等待扫码超时（2分钟），请重试")
                 return ""
 
+            # 跳转到小鹅通域触发跨域 SSO，确保 xiaoeknow.com 的 cookie 被种下
+            logger.info("正在同步登录态...")
             time.sleep(2)
+            try:
+                page.goto("https://h5.xiaoeknow.com", wait_until="domcontentloaded", timeout=15000)
+                time.sleep(2)
+            except Exception:
+                pass
 
-            # 提取所有 cookie
-            cookies = context.cookies()
-            cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
-            logger.info(f"✓ 获取到 {len(cookies)} 个 cookie")
+            # 提取所有 cookie（过滤只保留相关域名）
+            all_cookies = context.cookies()
+            relevant_domains = ['xiaoeknow.com', 'xiaoe-tech.com', 'h5.xiaoeknow.com', 'h5.xet.citv.cn']
+            filtered = [
+                c for c in all_cookies
+                if any(d in (c.get('domain', '')) for d in relevant_domains)
+            ]
+            if not filtered:
+                filtered = all_cookies  # fallback: 全取
+            cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in filtered)
+            logger.info(f"✓ 获取到 {len(filtered)} 个 cookie (共 {len(all_cookies)} 个)")
 
             return cookie_str
 
