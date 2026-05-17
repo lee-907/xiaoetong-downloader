@@ -307,14 +307,7 @@ class XiaoetDownloadManager:
         try:
             live_details = self.api_client.get_lookback_detail_info(resource.resource_id)
 
-            # 提取 room_id（遍历 list 找到第一个含 room_id 的 dict）
-            if isinstance(live_details, list):
-                for item in live_details:
-                    if isinstance(item, dict) and item.get('room_id'):
-                        resource.room_id = item['room_id']
-                        break
-            elif isinstance(live_details, dict):
-                resource.room_id = live_details.get('room_id', '')
+            # room_id 由 get_interaction_images 自动从 msg/list 响应中发现，此处无需提取
 
             if isinstance(live_details, dict):
                 # redirect/uRL 是登录重定向，不是视频地址，忽略
@@ -343,27 +336,10 @@ class XiaoetDownloadManager:
         return None
 
     def _download_ppt_images(self, resource: Resource, course_dir: str, user_id: str):
-        """下载直播互动区的 PPT 图片"""
-        room_id = resource.room_id
-        # 如果 _get_live_m3u8_url 没有提取到 room_id，再尝试一次
-        if not room_id:
-            try:
-                live_details = self.api_client.get_lookback_detail_info(resource.resource_id)
-                if isinstance(live_details, list):
-                    for item in live_details:
-                        if isinstance(item, dict) and item.get('room_id'):
-                            room_id = item['room_id']
-                            break
-                elif isinstance(live_details, dict):
-                    room_id = live_details.get('room_id', '')
-            except Exception:
-                pass
-        if not room_id:
-            logger.warning(f"无法获取 room_id，跳过 PPT 下载: {resource.title}")
-            return
+        """下载直播互动区的 PPT 图片（room_id 由 API 层自动发现）"""
         try:
             images = self.api_client.get_interaction_images(
-                resource.resource_id, room_id, user_id
+                resource.resource_id, resource.room_id or '', user_id
             )
             if not images:
                 return

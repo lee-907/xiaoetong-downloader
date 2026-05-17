@@ -220,8 +220,8 @@ class XiaoetAPIClient:
             if quality in play_list_dict and play_list_dict.get(quality, {}).get('play_url'):
                 return play_list_dict.get(quality, {}).get('play_url'), quality
 
-    def get_interaction_images(self, resource_id: str, room_id: str, user_id: str) -> List[str]:
-        """获取互动区的 PPT 图片 URL 列表"""
+    def get_interaction_images(self, resource_id: str, room_id: str = '', user_id: str = '') -> List[str]:
+        """获取互动区的 PPT 图片 URL 列表。若 room_id 为空则从首次响应中自动发现。"""
         url = f"https://{self.config.app_id}.h5.xiaoeknow.com/_alive/bff_h5/msg/list"
         headers = {
             'cookie': self.config.cookie,
@@ -239,7 +239,7 @@ class XiaoetAPIClient:
                 'comment_id': cursor,
                 'size': 50,
                 'alive_id': resource_id,
-                'room_id': room_id,
+                'room_id': room_id or '',
                 'app_id': self.config.app_id,
                 'load_history': 1,
                 'user_id': user_id,
@@ -247,9 +247,13 @@ class XiaoetAPIClient:
             try:
                 response = self.session.post(url, headers=headers, json=body, timeout=30)
                 response.raise_for_status()
-                msgs = response.json().get('data', {}).get('msgs', []) or []
+                data = response.json().get('data', {})
+                msgs = data.get('msgs', []) or []
                 if not msgs:
                     break
+                # 首次请求时若 room_id 为空，从消息中自动发现
+                if not room_id and msgs:
+                    room_id = msgs[0].get('room_id', '') or room_id
                 new_msgs = [m for m in msgs if m.get('id') not in seen_msg_ids]
                 if not new_msgs:
                     break
