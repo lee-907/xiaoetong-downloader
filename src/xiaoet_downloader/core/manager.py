@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+from urllib.parse import urlparse
 from typing import List, Dict, Tuple, Optional, Any
 
 from ..models.config import XiaoetConfig
@@ -303,7 +304,7 @@ class XiaoetDownloadManager:
             return None
 
     def _get_live_m3u8_url(self, resource: Resource) -> Optional[str]:
-        """获取直播回放 m3u8 地址，同时提取 room_id 存入 resource"""
+        """获取直播回放 m3u8 地址"""
         try:
             live_details = self.api_client.get_lookback_detail_info(resource.resource_id)
 
@@ -350,9 +351,10 @@ class XiaoetDownloadManager:
 
             logger.info(f"  下载 {len(images)} 张 PPT 图片...")
             for i, img_url in enumerate(images):
-                ext = '.png'
-                if '.jpg' in img_url or '.jpeg' in img_url:
-                    ext = '.jpg'
+                path_part = urlparse(img_url).path
+                ext = os.path.splitext(path_part)[1] or '.png'
+                if ext.lower() not in ('.png', '.jpg', '.jpeg', '.gif', '.webp'):
+                    ext = '.png'
                 img_file = os.path.join(ppt_dir, f'{i+1:02d}{ext}')
                 if os.path.exists(img_file):
                     continue

@@ -57,7 +57,7 @@ class VideoDownloader:
             resource.download_status = DownloadStatus.DOWNLOADING
             logger.info(f"开始下载视频: {resource.title}")
 
-            response = self.session.get(play_url)
+            response = self.session.get(play_url, timeout=30)
             if response.status_code != 200:
                 return DownloadResult(resource, False, f"获取m3u8内容失败: HTTP {response.status_code}")
 

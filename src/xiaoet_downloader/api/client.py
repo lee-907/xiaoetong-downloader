@@ -40,9 +40,9 @@ class XiaoetAPIClient:
             'cookie': self.config.cookie,
             'Content-Type': 'application/json'
         }
-        
+
         try:
-            response = self.session.post(url, headers=headers, data=payload)
+            response = self.session.post(url, headers=headers, data=payload, timeout=30)
             response.raise_for_status()
             data = response.json().get('data', {})
             return data
@@ -69,7 +69,7 @@ class XiaoetAPIClient:
                         'bizData[page_size]': str(page_size),
                         'bizData[sort]': sort
                     }
-                    response = self.session.post(url, headers=headers, data=payload)
+                    response = self.session.post(url, headers=headers, data=payload, timeout=30)
                     response.raise_for_status()
                     data = response.json().get('data', {})
                     items = data.get('list', [])
@@ -93,7 +93,7 @@ class XiaoetAPIClient:
                         'bizData[page_size]': str(page_size),
                         'bizData[sort]': sort
                     }
-                    response = self.session.post(url, headers=headers, data=payload)
+                    response = self.session.post(url, headers=headers, data=payload, timeout=30)
                     response.raise_for_status()
                     data = response.json().get('data', {})
                     items = data.get('list', [])
@@ -131,7 +131,7 @@ class XiaoetAPIClient:
         }
         
         try:
-            response = self.session.post(url, headers=headers, data=payload)
+            response = self.session.post(url, headers=headers, data=payload, timeout=30)
             response.raise_for_status()
             data = response.json().get('data', {})
             return data.get('video_info', {})
@@ -154,7 +154,7 @@ class XiaoetAPIClient:
         }
 
         try:
-            response = self.session.post(url, headers=headers, json=payload)
+            response = self.session.post(url, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
             data = response.json().get('data', {})
             return data
@@ -163,7 +163,7 @@ class XiaoetAPIClient:
         except json.JSONDecodeError as e:
             raise Exception(f"解析文件详情响应失败: {str(e)}")
 
-    def get_lookback_detail_info(self, resource_id: str) -> List:
+    def get_lookback_detail_info(self, resource_id: str):
         """获取直播回放列表（含 m3u8 地址）"""
         url = self.GET_LIVE_LOOK_BACK_DETAILS_INFO_URL.format(self.config.app_id)
         payload = {
@@ -177,7 +177,7 @@ class XiaoetAPIClient:
         }
 
         try:
-            response = self.session.get(url, headers=headers, params=payload)
+            response = self.session.get(url, headers=headers, params=payload, timeout=30)
             response.raise_for_status()
             return response.json().get('data', [])
         except requests.RequestException as e:
@@ -202,7 +202,7 @@ class XiaoetAPIClient:
         }
         
         try:
-            response = self.session.post(url, headers=headers, data=payload)
+            response = self.session.post(url, headers=headers, data=payload, timeout=30)
             response.raise_for_status()
             data = response.json().get('data', {})
             play_list_dict = data.get(play_sign, {}).get('play_list', {})
@@ -251,9 +251,13 @@ class XiaoetAPIClient:
                 msgs = data.get('msgs', []) or []
                 if not msgs:
                     break
-                # 首次请求时若 room_id 为空，从消息中自动发现
-                if not room_id and msgs:
-                    room_id = msgs[0].get('room_id', '') or room_id
+                # 首次请求时若 room_id 为空，遍历消息自动发现
+                if not room_id:
+                    for m in msgs:
+                        rid = m.get('room_id', '')
+                        if rid:
+                            room_id = rid
+                            break
                 new_msgs = [m for m in msgs if m.get('id') not in seen_msg_ids]
                 if not new_msgs:
                     break
