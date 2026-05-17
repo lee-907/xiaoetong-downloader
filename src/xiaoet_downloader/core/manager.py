@@ -129,60 +129,21 @@ class XiaoetDownloadManager:
                         resource_type=resource_type
                     )
 
-                    if resource_type == ResourceType.DOCUMENT:
-                        doc_info = self._get_document_url(resource, product_id)
-                        if not doc_info:
-                            results['failed'].append(DownloadResult(resource, False, "无法获取文档地址"))
-                            continue
-                        document_title, document_url = doc_info
-                        final_path = os.path.join(course_dir, document_title)
-                        if self.downloader.download_document(document_url, final_path):
-                            manifest.mark_completed(resource_id, resource_title, final_path, 'document')
-                            manifest.save()
-                            results['success'].append(DownloadResult(resource, True, "下载完成", final_path))
-                        else:
-                            results['failed'].append(DownloadResult(resource, False, "文档下载失败"))
-                    elif resource_type in (ResourceType.VIDEO, ResourceType.LIVE):
-                        if resource_type == ResourceType.LIVE:
-                            play_url = self._get_live_m3u8_url(resource)
-                            if not play_url:
-                                play_url = self._get_play_url(resource, user_id, product_id)
-                        else:
-                            play_url = self._get_play_url(resource, user_id, product_id)
-                        if not play_url:
-                            results['failed'].append(DownloadResult(resource, False, "无法获取播放地址"))
-                            continue
-
-                        download_result = self.downloader.download_m3u8_video(
-                            resource, play_url, course_dir, nocache, self.config.max_workers
+                    result = self._download_resource(
+                        resource, course_dir, user_id, product_id,
+                        nocache, auto_transcode, transcoder
+                    )
+                    if result.success:
+                        manifest.mark_completed(
+                            resource_id, resource_title,
+                            result.file_path, resource_type.value
                         )
-                        if download_result.success and auto_transcode:
-                            transcode_result = transcoder.transcode_video(
-                                resource, course_dir, index + 1
-                            )
-                            if transcode_result.success:
-                                manifest.mark_completed(
-                                    resource_id, resource_title,
-                                    transcode_result.file_path, resource_type.value
-                                )
-                                manifest.save()
-                                results['success'].append(transcode_result)
-                                # 下载 PPT 图片
-                                if resource_type == ResourceType.LIVE:
-                                    self._download_ppt_images(resource, course_dir, user_id)
-                            else:
-                                results['failed'].append(transcode_result)
-                        elif download_result.success:
-                            manifest.mark_completed(
-                                resource_id, resource_title,
-                                download_result.file_path, resource_type.value
-                            )
-                            manifest.save()
-                            results['success'].append(download_result)
-                            if resource_type == ResourceType.LIVE:
-                                self._download_ppt_images(resource, course_dir, user_id)
-                        else:
-                            results['failed'].append(download_result)
+                        manifest.save()
+                        results['success'].append(result)
+                        if resource_type == ResourceType.LIVE:
+                            self._download_ppt_images(resource, course_dir, user_id)
+                    else:
+                        results['failed'].append(result)
 
                 except Exception as e:
                     error_msg = f"处理 {resource_title} 时出错: {str(e)}"
@@ -201,17 +162,8 @@ class XiaoetDownloadManager:
                               auto_transcode: bool = True) -> DownloadResult:
         """
         下载单个视频，自动遍历所有课程找到匹配的资源
-
-        Args:
-            resource_id: 资源ID
-            nocache: 是否忽略缓存
-            auto_transcode: 是否自动转码
-
-        Returns:
-            DownloadResult: 下载结果
         """
         try:
-            # 获取用户信息
             navigation_info = self.api_client.get_micro_navigation_info()
             user_id = navigation_info.get('user_id')
             if not user_id:
@@ -225,76 +177,75 @@ class XiaoetDownloadManager:
             else:
                 resource_type = ResourceType.AUDIO
 
-            # 在所有课程中查找该资源的标题
-            title = resource_id  # 默认用 ID
+            # 在所有课程中查找该资源
+            title = resource_id
+            matched_product = None
             for product in self.config.products:
                 try:
                     items = self.api_client.get_column_items(self.config.app_id, product['product_id'])
                     for rid, rtitle in items:
                         if rid == resource_id:
                             title = rtitle
+                            matched_product = product
                             break
+                    if matched_product:
+                        break
                 except Exception:
                     pass
 
-            resource = Resource(
-                resource_id=resource_id,
-                title=title,
-                resource_type=resource_type
-            )
-
-            # 尝试在所有课程中获取播放地址
-            play_url = None
-            matched_product = None
-            for product in self.config.products:
-                try:
-                    if resource_type == ResourceType.LIVE:
-                        play_url = self._get_live_m3u8_url(resource)
-                    if not play_url:
-                        play_url = self._get_play_url(resource, user_id, product['product_id'])
-                    if play_url:
-                        matched_product = product
-                        break
-                except Exception:
-                    continue
-
-            if not play_url:
-                return DownloadResult(resource, False, "无法获取播放地址")
             if not matched_product:
-                return DownloadResult(resource, False, "未找到匹配的课程")
+                return DownloadResult(Resource(resource_id, title), False, "未找到匹配的课程")
 
+            resource = Resource(resource_id=resource_id, title=title, resource_type=resource_type)
             course_dir = self.config.get_course_dir(matched_product)
             FileUtils.ensure_dir(course_dir)
+            transcoder = VideoTranscoder(course_dir)
 
-            # 下载视频
-            download_result = self.downloader.download_m3u8_video(
-                resource, play_url, course_dir, nocache, self.config.max_workers
+            result = self._download_resource(
+                resource, course_dir, user_id, matched_product['product_id'],
+                nocache, auto_transcode, transcoder
             )
-
-            if download_result.success and auto_transcode:
-                transcoder = VideoTranscoder(course_dir)
-                result = transcoder.transcode_video(resource, course_dir, 0)
-                if result.success:
-                    manifest = DownloadManifest.load(course_dir, matched_product['product_id'])
-                    manifest.mark_completed(resource_id, resource.title, result.file_path, resource_type.value)
-                    manifest.save()
-                    if resource_type == ResourceType.LIVE:
-                        self._download_ppt_images(resource, course_dir, user_id)
-                return result
-
-            if download_result.success:
+            if result.success:
                 manifest = DownloadManifest.load(course_dir, matched_product['product_id'])
-                manifest.mark_completed(resource_id, resource.title, download_result.file_path, resource_type.value)
+                manifest.mark_completed(resource_id, title, result.file_path, resource_type.value)
                 manifest.save()
                 if resource_type == ResourceType.LIVE:
                     self._download_ppt_images(resource, course_dir, user_id)
-
-            return download_result
+            return result
 
         except Exception as e:
-            error_msg = f"下载视频 {resource_id} 时出错: {str(e)}"
-            logger.error(error_msg)
-            return DownloadResult(Resource(resource_id, "未知"), False, error_msg)
+            logger.error(f"下载视频 {resource_id} 时出错: {str(e)}")
+            return DownloadResult(Resource(resource_id, "未知"), False, str(e))
+
+    def _download_resource(self, resource: Resource, course_dir: str, user_id: str,
+                           product_id: str, nocache: bool, auto_transcode: bool,
+                           transcoder: VideoTranscoder) -> DownloadResult:
+        """下载单个资源（文档或视频/直播），返回 DownloadResult"""
+        if resource.resource_type == ResourceType.DOCUMENT:
+            doc_info = self._get_document_url(resource, product_id)
+            if not doc_info:
+                return DownloadResult(resource, False, "无法获取文档地址")
+            document_title, document_url = doc_info
+            final_path = os.path.join(course_dir, document_title)
+            if self.downloader.download_document(document_url, final_path):
+                return DownloadResult(resource, True, "下载完成", final_path)
+            return DownloadResult(resource, False, "文档下载失败")
+
+        # 视频/直播: 获取播放地址
+        play_url = None
+        if resource.resource_type == ResourceType.LIVE:
+            play_url = self._get_live_m3u8_url(resource)
+        if not play_url:
+            play_url = self._get_play_url(resource, user_id, product_id)
+        if not play_url:
+            return DownloadResult(resource, False, "无法获取播放地址")
+
+        download_result = self.downloader.download_m3u8_video(
+            resource, play_url, course_dir, nocache, self.config.max_workers
+        )
+        if download_result.success and auto_transcode:
+            return transcoder.transcode_video(resource, course_dir, 0)
+        return download_result
 
     def _get_play_url(self, resource: Resource, user_id: str, product_id: str) -> Optional[str]:
         """获取播放URL"""
