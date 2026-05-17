@@ -12,8 +12,8 @@ class XiaoetAPIClient:
     """小鹅通API客户端"""
     
     # API URL模板
-    # GET_COLUMN_ITEMS_URL = "https://{0}.h5.xiaoeknow.com/xe.course.business.column.items.get/2.0.0"
     GET_COLUMN_ITEMS_URL = "https://{0}.h5.xet.citv.cn/xe.course.business.avoidlogin.e_course.resource_catalog_list.get/1.0.0"
+    GET_COLUMN_ITEMS_URL_P = "https://{0}.h5.xiaoeknow.com/xe.course.business.column.items.get/2.0.0"
     GET_VIDEO_DETAILS_INFO_URL = "https://{0}.h5.xiaoeknow.com/xe.course.business.video.detail_info.get/2.0.0"
     GET_DOCUMENT_DETAILS_INFO_URL = "https://{0}.h5.xet.citv.cn/xe.course.business.e_course.document_info.get/1.0.0"
     GET_LIVE_LOOK_BACK_DETAILS_INFO_URL = "https://{0}.h5.xiaoeknow.com/_alive/v3/get_lookback_list"
@@ -51,39 +51,50 @@ class XiaoetAPIClient:
         except json.JSONDecodeError as e:
             raise Exception(f"解析导航信息响应失败: {str(e)}")
     
-    def get_column_items(self, app_id: str,column_id: str,p_id="0", page_index: int = 1,
-                        page_size: int = 100, sort: str = 'desc') :
-        """获取专栏项目列表"""
-        url = self.GET_COLUMN_ITEMS_URL.format(self.config.app_id)
-        payload = {
-            'bizData[app_id]': app_id,
-            # 'bizData[resource_id]': "v_67cedf2de4b0694ca0767527",
-            'bizData[p_id]':p_id,
-            'bizData[course_id]': column_id,
-            'bizData[page_index]': str(page_index),
-            'bizData[page_size]': str(page_size),
-            'bizData[sort]': sort
-        }
+    def get_column_items(self, app_id: str, column_id: str, p_id="0", page_index: int = 1,
+                        page_size: int = 100, sort: str = 'desc'):
+        """获取课程/专栏资源列表"""
+        headers = {'cookie': self.config.cookie}
 
-        headers = {
-            'cookie': self.config.cookie,
-        }
-        
         try:
-            response = requests.post(url, headers=headers, data=payload)
-            response.raise_for_status()
-            data = response.json().get('data', {})
-            items = data.get('list', [])
+            # 根据前缀选择 API：p_ 走 column API，其他走 course API
+            if column_id.startswith('p_'):
+                url = self.GET_COLUMN_ITEMS_URL_P.format(self.config.app_id)
+                payload = {
+                    'bizData[column_id]': column_id,
+                    'bizData[page_index]': str(page_index),
+                    'bizData[page_size]': str(page_size),
+                    'bizData[sort]': sort
+                }
+                response = requests.post(url, headers=headers, data=payload)
+                response.raise_for_status()
+                data = response.json().get('data', {})
+                items = data.get('list', [])
+                return [(item.get('resource_id'), item.get('resource_title')) for item in items]
+            else:
+                url = self.GET_COLUMN_ITEMS_URL.format(self.config.app_id)
+                payload = {
+                    'bizData[app_id]': app_id,
+                    'bizData[p_id]': p_id,
+                    'bizData[course_id]': column_id,
+                    'bizData[page_index]': str(page_index),
+                    'bizData[page_size]': str(page_size),
+                    'bizData[sort]': sort
+                }
+                response = requests.post(url, headers=headers, data=payload)
+                response.raise_for_status()
+                data = response.json().get('data', {})
+                items = data.get('list', [])
 
-            result = []
-            for item in items:
-                children = item.get('children', [])
-                if children:
-                    sub = self.get_column_items(app_id, column_id, item.get('resource_id'))
-                    result.extend(sub)
-                else:
-                    result.append((item.get('resource_id'), item.get('resource_title')))
-            return result
+                result = []
+                for item in items:
+                    children = item.get('children', [])
+                    if children:
+                        sub = self.get_column_items(app_id, column_id, item.get('resource_id'))
+                        result.extend(sub)
+                    else:
+                        result.append((item.get('resource_id'), item.get('resource_title')))
+                return result
         except requests.RequestException as e:
             raise Exception(f"获取专栏项目列表失败: {str(e)}")
         except json.JSONDecodeError as e:
