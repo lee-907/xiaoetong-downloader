@@ -5,7 +5,7 @@ import os
 from typing import List, Dict, Tuple, Optional, Any
 
 from ..models.config import XiaoetConfig
-from ..models.resource import Resource, DownloadResult, ResourceType, DownloadStatus
+from ..models.resource import Resource, DownloadResult, ResourceType
 from ..models.manifest import DownloadManifest
 from ..api.client import XiaoetAPIClient
 from ..core.downloader import VideoDownloader
@@ -262,7 +262,11 @@ class XiaoetDownloadManager:
 
             resource.play_sign = play_sign
             play_list_dict = self.api_client.get_play_url(user_id, play_sign)
-            play_url, quality = self.api_client.get_best_quality_url(play_list_dict)
+            result = self.api_client.get_best_quality_url(play_list_dict)
+            if not result:
+                logger.warning(f"未找到可用的清晰度: {resource.title}")
+                return None
+            play_url, quality = result
 
             if play_url:
                 logger.info(f"获取到 {quality} 播放地址")

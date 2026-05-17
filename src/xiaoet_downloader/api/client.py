@@ -42,7 +42,7 @@ class XiaoetAPIClient:
         }
         
         try:
-            response = requests.post(url, headers=headers, data=payload)
+            response = self.session.post(url, headers=headers, data=payload)
             response.raise_for_status()
             data = response.json().get('data', {})
             return data
@@ -66,7 +66,7 @@ class XiaoetAPIClient:
                     'bizData[page_size]': str(page_size),
                     'bizData[sort]': sort
                 }
-                response = requests.post(url, headers=headers, data=payload)
+                response = self.session.post(url, headers=headers, data=payload)
                 response.raise_for_status()
                 data = response.json().get('data', {})
                 items = data.get('list', [])
@@ -81,7 +81,7 @@ class XiaoetAPIClient:
                     'bizData[page_size]': str(page_size),
                     'bizData[sort]': sort
                 }
-                response = requests.post(url, headers=headers, data=payload)
+                response = self.session.post(url, headers=headers, data=payload)
                 response.raise_for_status()
                 data = response.json().get('data', {})
                 items = data.get('list', [])
@@ -113,7 +113,7 @@ class XiaoetAPIClient:
         }
         
         try:
-            response = requests.post(url, headers=headers, data=payload)
+            response = self.session.post(url, headers=headers, data=payload)
             response.raise_for_status()
             data = response.json().get('data', {})
             return data.get('video_info', {}) if isinstance(data, dict) else None
@@ -159,7 +159,7 @@ class XiaoetAPIClient:
         }
 
         try:
-            response = requests.get(url, headers=headers, params=payload)
+            response = self.session.get(url, headers=headers, params=payload)
             response.raise_for_status()
             return response.json().get('data', [])
         except requests.RequestException as e:
@@ -184,7 +184,7 @@ class XiaoetAPIClient:
         }
         
         try:
-            response = requests.post(url, headers=headers, data=payload)
+            response = self.session.post(url, headers=headers, data=payload)
             response.raise_for_status()
             data = response.json().get('data', {})
             play_list_dict = data.get(play_sign, {}).get('play_list', {})
@@ -201,24 +201,6 @@ class XiaoetAPIClient:
         for quality in quality_order:
             if quality in play_list_dict and play_list_dict.get(quality, {}).get('play_url'):
                 return play_list_dict.get(quality, {}).get('play_url'), quality
-
-    def get_im_room_id(self, resource_id: str, user_id: str) -> Optional[str]:
-        """获取互动消息房间ID"""
-        url = f"https://{self.config.app_id}.h5.xiaoeknow.com/_alive/v3/im_sign_student"
-        params = {
-            'room_id': '', 'source': 'live_h5'
-        }
-        headers = {
-            'cookie': self.config.cookie,
-        }
-        try:
-            # 先试着不传 room_id 获取 im 信息
-            response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            # 如果有 secondary_info 可以用它获取 room_id
-            return None  # room_id 需要从页面获取，这里返回 None
-        except Exception:
-            return None
 
     def get_interaction_images(self, resource_id: str, room_id: str, user_id: str) -> List[str]:
         """获取互动区的 PPT 图片 URL 列表"""
@@ -245,7 +227,7 @@ class XiaoetAPIClient:
                 'user_id': user_id,
             }
             try:
-                response = requests.post(url, headers=headers, json=body)
+                response = self.session.post(url, headers=headers, json=body)
                 response.raise_for_status()
                 msgs = response.json().get('data', {}).get('msgs', []) or []
                 if not msgs:
@@ -269,5 +251,3 @@ class XiaoetAPIClient:
             except Exception:
                 break
         return images
-        
-        return None, None
