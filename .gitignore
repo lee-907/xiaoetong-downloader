@@ -181,5 +181,7 @@ download/
 # config file
 config.json
 config1.json
+# binary files (Windows ffmpeg, not needed on macOS)
+ffmpeg.exe
 # log file
 logs/
