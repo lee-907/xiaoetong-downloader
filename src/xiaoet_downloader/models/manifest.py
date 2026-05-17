@@ -29,13 +29,15 @@ class DownloadManifest:
         return manifest
 
     def save(self):
-        """写入清单文件"""
+        """原子写入清单文件，避免中途崩溃导致文件损坏"""
         os.makedirs(os.path.dirname(self._filepath), exist_ok=True)
-        with open(self._filepath, 'w', encoding='utf-8') as f:
+        tmp_path = self._filepath + '.tmp'
+        with open(tmp_path, 'w', encoding='utf-8') as f:
             json.dump({
                 'product_id': self._product_id,
                 'resources': self._resources
             }, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, self._filepath)
 
     def is_completed(self, resource_id: str) -> bool:
         """判断资源是否已完成下载"""

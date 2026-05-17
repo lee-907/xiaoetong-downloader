@@ -39,10 +39,7 @@ class XiaoetConfig:
             if not os.path.isabs(download_dir):
                 download_dir = os.path.abspath(download_dir)
 
-            user_agent = config_data.get(
-                'user_agent',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-            )
+            user_agent = config_data.get('user_agent') or cls.user_agent
 
             return cls(
                 app_id=config_data.get('app_id', ''),

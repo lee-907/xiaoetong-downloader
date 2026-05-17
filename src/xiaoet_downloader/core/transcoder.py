@@ -17,14 +17,7 @@ class VideoTranscoder:
         """初始化转码器"""
         self.download_dir = download_dir
 
-    def transcode_video(self, resource: Resource, path: str, index: int) -> DownloadResult:
-        """
-         合并编码
-        @param resource: 资源对象
-        @param path: 下载存储路径
-        @param index: 章节下标
-        @return: 合并结果
-        """
+    def transcode_video(self, resource: Resource, path: str) -> DownloadResult:
         lesson_dir = os.path.join(path, FileUtils.sanitize_filename(resource.title))
         cache_dir = os.path.join(lesson_dir, 'cache')
         metadata_file = os.path.join(cache_dir, 'metadata.json')

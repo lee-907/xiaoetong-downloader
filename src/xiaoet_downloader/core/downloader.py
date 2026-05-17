@@ -95,7 +95,6 @@ class VideoDownloader:
             # 并行下载未缓存的片段
             if pending_indices:
                 lock = threading.Lock()
-                failed = False
                 completed = 0
                 total_pending = len(pending_indices)
 
@@ -117,8 +116,6 @@ class VideoDownloader:
                             completed += 1
                             if success:
                                 downloaded_count += 1
-                            else:
-                                failed = True
                             # 更新进度条
                             current_total = downloaded_count
                             percent = current_total / total_segments
@@ -128,7 +125,8 @@ class VideoDownloader:
                             sys.stdout.flush()
 
             # 构建最终进度条（下载部分完成后）
-            print()
+            if pending_indices:
+                print()
 
             # 按索引顺序构建 segments 列表
             segments = SegmentList()
@@ -235,5 +233,5 @@ class VideoDownloader:
             except requests.exceptions.RequestException:
                 if retry_count < max_retries - 1:
                     time.sleep(1)
-        logger.error(f"[{retry_count}/{max_retries}] 达到最大重试次数，下载失败")
+        logger.error(f"文档下载失败，已重试 {max_retries} 次: {document_url[:120]}")
         return False

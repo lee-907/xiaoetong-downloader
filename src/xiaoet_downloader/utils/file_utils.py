@@ -84,7 +84,7 @@ class FileUtils:
         """打开文件或目录"""
         try:
             if sys.platform.startswith('win'):
-                subprocess.run(['start', path], shell=True, check=True)
+                subprocess.run(['cmd', '/c', 'start', '', path], check=True)
             elif sys.platform.startswith('darwin'):
                 subprocess.run(['open', path], check=True)
             else:

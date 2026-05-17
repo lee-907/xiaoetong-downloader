@@ -60,34 +60,52 @@ class XiaoetAPIClient:
             # 根据前缀选择 API：p_ 走 column API，其他走 course API
             if column_id.startswith('p_'):
                 url = self.GET_COLUMN_ITEMS_URL_P.format(self.config.app_id)
-                payload = {
-                    'bizData[column_id]': column_id,
-                    'bizData[page_index]': str(page_index),
-                    'bizData[page_size]': str(page_size),
-                    'bizData[sort]': sort
-                }
-                response = self.session.post(url, headers=headers, data=payload)
-                response.raise_for_status()
-                data = response.json().get('data', {})
-                items = data.get('list', [])
-                return [(item.get('resource_id'), item.get('resource_title')) for item in items]
+                all_items = []
+                current_page = page_index
+                while True:
+                    payload = {
+                        'bizData[column_id]': column_id,
+                        'bizData[page_index]': str(current_page),
+                        'bizData[page_size]': str(page_size),
+                        'bizData[sort]': sort
+                    }
+                    response = self.session.post(url, headers=headers, data=payload)
+                    response.raise_for_status()
+                    data = response.json().get('data', {})
+                    items = data.get('list', [])
+                    if not items:
+                        break
+                    all_items.extend(items)
+                    if len(items) < page_size:
+                        break
+                    current_page += 1
+                return [(item.get('resource_id'), item.get('resource_title')) for item in all_items]
             else:
                 url = self.GET_COLUMN_ITEMS_URL.format(self.config.app_id)
-                payload = {
-                    'bizData[app_id]': app_id,
-                    'bizData[p_id]': p_id,
-                    'bizData[course_id]': column_id,
-                    'bizData[page_index]': str(page_index),
-                    'bizData[page_size]': str(page_size),
-                    'bizData[sort]': sort
-                }
-                response = self.session.post(url, headers=headers, data=payload)
-                response.raise_for_status()
-                data = response.json().get('data', {})
-                items = data.get('list', [])
+                all_items = []
+                current_page = page_index
+                while True:
+                    payload = {
+                        'bizData[app_id]': app_id,
+                        'bizData[p_id]': p_id,
+                        'bizData[course_id]': column_id,
+                        'bizData[page_index]': str(current_page),
+                        'bizData[page_size]': str(page_size),
+                        'bizData[sort]': sort
+                    }
+                    response = self.session.post(url, headers=headers, data=payload)
+                    response.raise_for_status()
+                    data = response.json().get('data', {})
+                    items = data.get('list', [])
+                    if not items:
+                        break
+                    all_items.extend(items)
+                    if len(items) < page_size:
+                        break
+                    current_page += 1
 
                 result = []
-                for item in items:
+                for item in all_items:
                     children = item.get('children', [])
                     if children:
                         sub = self.get_column_items(app_id, column_id, item.get('resource_id'))
@@ -116,7 +134,7 @@ class XiaoetAPIClient:
             response = self.session.post(url, headers=headers, data=payload)
             response.raise_for_status()
             data = response.json().get('data', {})
-            return data.get('video_info', {}) if isinstance(data, dict) else None
+            return data.get('video_info', {})
         except requests.RequestException as e:
             raise Exception(f"获取视频详情失败: {str(e)}")
         except json.JSONDecodeError as e:
@@ -136,7 +154,7 @@ class XiaoetAPIClient:
         }
 
         try:
-            response = requests.post(url, headers=headers, json=payload)
+            response = self.session.post(url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json().get('data', {})
             return data
@@ -227,7 +245,7 @@ class XiaoetAPIClient:
                 'user_id': user_id,
             }
             try:
-                response = self.session.post(url, headers=headers, json=body)
+                response = self.session.post(url, headers=headers, json=body, timeout=30)
                 response.raise_for_status()
                 msgs = response.json().get('data', {}).get('msgs', []) or []
                 if not msgs:
@@ -248,6 +266,6 @@ class XiaoetAPIClient:
                         except (json.JSONDecodeError, TypeError):
                             pass
                 cursor = str(msgs[-1].get('id', ''))
-            except Exception:
+            except (requests.RequestException, json.JSONDecodeError):
                 break
         return images

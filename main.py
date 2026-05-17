@@ -12,6 +12,7 @@
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -101,10 +102,16 @@ def main():
             logger.info("请创建配置文件，参考 config.json.example")
             return 1
 
-        import json
         from xiaoet_downloader.auth.login import check_cookie_valid, qrcode_login
 
         config = XiaoetConfig.from_file(args.config)
+
+        # 验证配置完整性
+        try:
+            config.validate()
+        except ValueError as e:
+            logger.error(f"配置无效: {e}")
+            return 1
 
         # 检查 cookie 有效性
         if not check_cookie_valid(config.cookie, config.app_id, config.user_agent):
@@ -118,12 +125,14 @@ def main():
             # 更新内存中的 config
             config.cookie = new_cookie
 
-            # 写回配置文件
+            # 写回配置文件（原子写入）
             with open(args.config, 'r', encoding='utf-8') as f:
                 cfg_json = json.load(f)
             cfg_json['cookie'] = new_cookie
-            with open(args.config, 'w', encoding='utf-8') as f:
+            tmp_path = args.config + '.tmp'
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(cfg_json, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, args.config)
             logger.info("✓ Cookie 已更新到配置文件")
 
         # 仅登录模式

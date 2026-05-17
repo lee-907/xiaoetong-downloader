@@ -31,7 +31,7 @@ def check_cookie_valid(cookie: str, app_id: str, user_agent: str) -> bool:
         data = resp.json()
         user_id = data.get('data', {}).get('user_id', '')
         return data.get('code') == 0 and user_id and not user_id.startswith('anonymous')
-    except Exception:
+    except (requests.RequestException, json.JSONDecodeError, ValueError):
         return False
 
 

@@ -22,6 +22,17 @@ class XiaoetDownloadManager:
         self.config = config
         self.api_client = XiaoetAPIClient(config)
         self.downloader = VideoDownloader(config)
+        self._user_id: Optional[str] = None
+
+    def _get_user_id(self) -> Optional[str]:
+        """获取用户ID（单次请求，缓存复用）"""
+        if self._user_id:
+            return self._user_id
+        navigation_info = self.api_client.get_micro_navigation_info()
+        self._user_id = navigation_info.get('user_id')
+        if not self._user_id:
+            logger.error("无法获取用户ID")
+        return self._user_id
 
     def download_all_courses(self, nocache: bool = False, auto_transcode: bool = True,
                              force: bool = False) -> Dict[str, Any]:
@@ -73,11 +84,9 @@ class XiaoetDownloadManager:
             manifest = DownloadManifest.load(course_dir, product_id)
             transcoder = VideoTranscoder(course_dir)
 
-            # 获取用户信息
-            navigation_info = self.api_client.get_micro_navigation_info()
-            user_id = navigation_info.get('user_id')
+            # 获取用户信息（缓存复用）
+            user_id = self._get_user_id()
             if not user_id:
-                logger.error("无法获取用户ID")
                 return results
 
             # 获取课程资源列表
@@ -164,8 +173,7 @@ class XiaoetDownloadManager:
         下载单个视频，自动遍历所有课程找到匹配的资源
         """
         try:
-            navigation_info = self.api_client.get_micro_navigation_info()
-            user_id = navigation_info.get('user_id')
+            user_id = self._get_user_id()
             if not user_id:
                 return DownloadResult(Resource(resource_id, "未知"), False, "无法获取用户ID")
 
@@ -244,7 +252,7 @@ class XiaoetDownloadManager:
             resource, play_url, course_dir, nocache, self.config.max_workers
         )
         if download_result.success and auto_transcode:
-            return transcoder.transcode_video(resource, course_dir, 0)
+            return transcoder.transcode_video(resource, course_dir)
         return download_result
 
     def _get_play_url(self, resource: Resource, user_id: str, product_id: str) -> Optional[str]:
@@ -286,8 +294,8 @@ class XiaoetDownloadManager:
             document_details = self.api_client.get_document_detail_info(resource.resource_id, product_id)
             file_name = document_details.get('file_name')
             file_url = document_details.get('file_url')
-            if not file_url:
-                logger.warning(f"无法获取文件 {resource.title} 的资源")
+            if not file_name or not file_url:
+                logger.warning(f"无法获取文件 {resource.title} 的资源 (file_name={file_name}, file_url={file_url})")
                 return None
             return file_name, file_url
         except Exception as e:
@@ -295,9 +303,17 @@ class XiaoetDownloadManager:
             return None
 
     def _get_live_m3u8_url(self, resource: Resource) -> Optional[str]:
-        """获取直播回放 m3u8 地址"""
+        """获取直播回放 m3u8 地址，同时提取 room_id 存入 resource"""
         try:
             live_details = self.api_client.get_lookback_detail_info(resource.resource_id)
+
+            # 提取 room_id
+            if isinstance(live_details, list) and live_details:
+                first = live_details[0]
+                resource.room_id = first.get('room_id', '') if isinstance(first, dict) else ''
+            elif isinstance(live_details, dict):
+                resource.room_id = live_details.get('room_id', '')
+
             if isinstance(live_details, dict):
                 # redirect/uRL 是登录重定向，不是视频地址，忽略
                 for key in ('line_sharpness',):
@@ -319,13 +335,17 @@ class XiaoetDownloadManager:
                                 return url
                     elif isinstance(item, str) and item.startswith('http'):
                         return item
+            logger.debug(f"未从直播回放数据中提取到 m3u8 地址: {resource.resource_id}")
         except Exception as e:
             logger.error(f"获取直播回放URL时出错: {str(e)}")
         return None
 
     def _download_ppt_images(self, resource: Resource, course_dir: str, user_id: str):
         """下载直播互动区的 PPT 图片"""
-        room_id = 'XET#3ef612fbf00761c10'  # 固定 room_id，同 app 下复用
+        room_id = resource.room_id
+        if not room_id:
+            logger.warning(f"无法获取 room_id，跳过 PPT 下载: {resource.title}")
+            return
         try:
             images = self.api_client.get_interaction_images(
                 resource.resource_id, room_id, user_id

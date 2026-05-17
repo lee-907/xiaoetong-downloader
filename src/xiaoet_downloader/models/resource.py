@@ -11,8 +11,8 @@ class ResourceType(Enum):
     VIDEO = 'video'
     AUDIO = 'audio'
     PRODUCT = 'product'
-    DOCUMENT = 'DOCUMENT'
-    LIVE = 'LIVE'
+    DOCUMENT = 'document'
+    LIVE = 'live'
 
 
 class DownloadStatus(Enum):
@@ -35,6 +35,7 @@ class Resource:
     is_available: bool = True
     download_status: DownloadStatus = DownloadStatus.PENDING
     file_path: Optional[str] = None
+    room_id: Optional[str] = None
     error_message: Optional[str] = None
     
     @classmethod
@@ -58,6 +59,7 @@ class Resource:
             'is_available': self.is_available,
             'download_status': self.download_status.value,
             'file_path': self.file_path,
+            'room_id': self.room_id,
             'error_message': self.error_message
         }
 
