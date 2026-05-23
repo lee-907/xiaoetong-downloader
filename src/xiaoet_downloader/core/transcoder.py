@@ -3,6 +3,7 @@
 
 import os
 import shutil
+import time
 import ffmpy
 
 from ..models.resource import Resource, VideoMetadata, DownloadResult, DownloadStatus
@@ -17,7 +18,8 @@ class VideoTranscoder:
         """初始化转码器"""
         self.download_dir = download_dir
 
-    def transcode_video(self, resource: Resource, path: str) -> DownloadResult:
+    def transcode_video(self, resource: Resource, path: str,
+                        max_retries: int = 2) -> DownloadResult:
         lesson_dir = os.path.join(path, FileUtils.sanitize_filename(resource.title))
         cache_dir = os.path.join(lesson_dir, 'cache')
         metadata_file = os.path.join(cache_dir, 'metadata.json')
@@ -59,8 +61,20 @@ class VideoTranscoder:
                 outputs={output_file: "-c:v copy -c:a copy"}
             )
 
-            logger.info(f"执行命令: {ff.cmd}")
-            ff.run()
+            # 带重试的 ffmpeg 合并（瞬时 I/O 故障可能导致偶发非零退出）
+            last_error = None
+            for attempt in range(max_retries + 1):
+                try:
+                    logger.info(f"执行命令: {ff.cmd}")
+                    ff.run()
+                    break
+                except ffmpy.FFRuntimeError as e:
+                    last_error = e
+                    if attempt < max_retries:
+                        logger.warning(f"ffmpeg 合并失败 (attempt {attempt+1}/{max_retries+1})，重试中...")
+                        time.sleep(2)
+                    else:
+                        raise
 
             # 验证输出文件
             if os.path.exists(output_file) and FileUtils.get_file_size(output_file) > 0:
