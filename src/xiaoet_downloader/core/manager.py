@@ -8,6 +8,7 @@ from typing import List, Dict, Tuple, Optional, Any
 from ..models.config import XiaoetConfig
 from ..models.resource import Resource, DownloadResult, ResourceType
 from ..models.manifest import DownloadManifest
+from ..models.feishu_manifest import FeishuManifest
 from ..api.client import XiaoetAPIClient
 from ..core.downloader import VideoDownloader
 from ..core.transcoder import VideoTranscoder
@@ -82,7 +83,10 @@ class XiaoetDownloadManager:
         try:
             # 加载下载清单
             FileUtils.ensure_dir(course_dir)
-            manifest = DownloadManifest.load(course_dir, product_id)
+            if self.config.manifest_backend == "feishu":
+                manifest = FeishuManifest.load(self.config.feishu, product_id, product['product_name'])
+            else:
+                manifest = DownloadManifest.load(course_dir, product_id)
             transcoder = VideoTranscoder(course_dir)
 
             # 获取用户信息（缓存复用）
@@ -108,10 +112,16 @@ class XiaoetDownloadManager:
                             Resource(resource_id, resource_title), True, "已下载"
                         ))
                         if resource_id.startswith('l_'):
-                            self._download_ppt_images(
+                            if hasattr(manifest, 'is_ppt_downloaded') and manifest.is_ppt_downloaded(resource_id):
+                                continue
+                            ppt_count = self._download_ppt_images(
                                 Resource(resource_id, resource_title, ResourceType.LIVE),
                                 course_dir, user_id
                             )
+                            if ppt_count and hasattr(manifest, 'mark_ppt_count'):
+                                manifest.mark_ppt_count(resource_id, ppt_count)
+                            elif ppt_count == 0 and hasattr(manifest, 'mark_ppt_empty'):
+                                manifest.mark_ppt_empty(resource_id)
                         continue
 
                     if resource_title in self.config.filter:
@@ -151,7 +161,10 @@ class XiaoetDownloadManager:
                         manifest.save()
                         results['success'].append(result)
                         if resource_type == ResourceType.LIVE:
-                            self._download_ppt_images(resource, course_dir, user_id)
+                            if not hasattr(manifest, 'is_ppt_downloaded') or not manifest.is_ppt_downloaded(resource_id):
+                                ppt_count = self._download_ppt_images(resource, course_dir, user_id)
+                                if ppt_count and hasattr(manifest, 'mark_ppt_count'):
+                                    manifest.mark_ppt_count(resource_id, ppt_count)
                     else:
                         results['failed'].append(result)
 
@@ -215,11 +228,17 @@ class XiaoetDownloadManager:
                 nocache, auto_transcode, transcoder
             )
             if result.success:
-                manifest = DownloadManifest.load(course_dir, matched_product['product_id'])
+                if self.config.manifest_backend == "feishu":
+                    manifest = FeishuManifest.load(self.config.feishu, matched_product['product_id'], matched_product['product_name'])
+                else:
+                    manifest = DownloadManifest.load(course_dir, matched_product['product_id'])
                 manifest.mark_completed(resource_id, title, result.file_path, resource_type.value)
                 manifest.save()
                 if resource_type == ResourceType.LIVE:
-                    self._download_ppt_images(resource, course_dir, user_id)
+                    if not hasattr(manifest, 'is_ppt_downloaded') or not manifest.is_ppt_downloaded(resource_id):
+                        ppt_count = self._download_ppt_images(resource, course_dir, user_id)
+                        if ppt_count and hasattr(manifest, 'mark_ppt_count'):
+                            manifest.mark_ppt_count(resource_id, ppt_count)
             return result
 
         except Exception as e:
@@ -343,7 +362,7 @@ class XiaoetDownloadManager:
                 resource.resource_id, resource.room_id or '', user_id
             )
             if not images:
-                return
+                return 0
 
             lesson_dir = os.path.join(course_dir, FileUtils.sanitize_filename(resource.title))
             ppt_dir = os.path.join(lesson_dir, 'ppt')
@@ -359,9 +378,14 @@ class XiaoetDownloadManager:
                 if os.path.exists(img_file):
                     continue
                 self.downloader.download_document(img_url, img_file)
-            logger.info(f"  PPT 图片已保存到 {ppt_dir}")
+            # 统计实际文件数，过滤 macOS ._ 隐藏文件
+            actual_count = sum(1 for f in os.listdir(ppt_dir)
+                             if os.path.isfile(os.path.join(ppt_dir, f)) and not f.startswith('._'))
+            logger.info(f"  PPT 图片已保存到 {ppt_dir} ({actual_count} 张)")
+            return actual_count
         except Exception as e:
             logger.warning(f"下载 PPT 图片失败: {e}")
+            return 0
 
     def _print_summary(self, course_name: str, results: Dict[str, List[DownloadResult]]) -> None:
         """打印单个课程处理结果摘要"""

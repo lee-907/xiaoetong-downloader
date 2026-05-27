@@ -10,5 +10,12 @@
   ],
   "download_dir": "download",
   "max_workers": 3,
-  "filter": []
+  "filter": [],
+  "manifest_backend": "json",
+  "feishu": {
+    "app_id": "",
+    "app_secret": "",
+    "bitable_app_token": "",
+    "table_id": ""
+  }
 }

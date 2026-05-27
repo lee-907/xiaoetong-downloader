@@ -83,6 +83,18 @@ def main():
     )
 
     parser.add_argument(
+        '--init-feishu-table',
+        action='store_true',
+        help='初始化飞书多维表格（创建表格和字段，写入配置）'
+    )
+
+    parser.add_argument(
+        '--feishu-app-token',
+        default='',
+        help='复用已有的多维表格 app_token（可选）'
+    )
+
+    parser.add_argument(
         '--verbose', '-v',
         action='store_true',
         help='显示详细日志'
@@ -112,6 +124,42 @@ def main():
         except ValueError as e:
             logger.error(f"配置无效: {e}")
             return 1
+
+        # 初始化飞书多维表格
+        if args.init_feishu_table:
+            from xiaoet_downloader.api.feishu import FeishuBitableClient
+
+            feishu = config.feishu
+            if not feishu.app_id or not feishu.app_secret:
+                logger.error("请先在 config.json 的 feishu 字段中填入 app_id 和 app_secret")
+                return 1
+
+            logger.info("正在初始化飞书多维表格...")
+            try:
+                result = FeishuBitableClient.init_table(
+                    feishu.app_id, feishu.app_secret, args.feishu_app_token
+                )
+            except Exception as e:
+                logger.error(f"初始化失败: {e}")
+                return 1
+
+            # 写回配置文件
+            with open(args.config, 'r', encoding='utf-8') as f:
+                cfg_json = json.load(f)
+            cfg_json.setdefault('feishu', {})
+            cfg_json['feishu']['bitable_app_token'] = result['app_token']
+            cfg_json['feishu']['table_id'] = result['table_id']
+            cfg_json['manifest_backend'] = 'feishu'
+            tmp_path = args.config + '.tmp'
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                json.dump(cfg_json, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, args.config)
+
+            logger.info(f"√ 多维表格初始化完成")
+            logger.info(f"  app_token: {result['app_token']}")
+            logger.info(f"  table_id:  {result['table_id']}")
+            logger.info(f"  已写入 {args.config}，manifest_backend 已切换为 feishu")
+            return 0
 
         # 检查 cookie 有效性
         if not check_cookie_valid(config.cookie, config.app_id, config.user_agent):

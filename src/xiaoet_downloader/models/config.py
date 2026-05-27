@@ -8,6 +8,15 @@ from typing import Optional
 
 
 @dataclass
+class FeishuConfig:
+    """飞书多维表格配置"""
+    app_id: str = ""
+    app_secret: str = ""
+    bitable_app_token: str = ""
+    table_id: str = ""
+
+
+@dataclass
 class XiaoetConfig:
     """小鹅通配置类"""
     app_id: str
@@ -17,6 +26,8 @@ class XiaoetConfig:
     download_dir: str = 'download'
     filter: list = field(default_factory=list)
     max_workers: int = 3
+    manifest_backend: str = "json"
+    feishu: FeishuConfig = field(default_factory=FeishuConfig)
 
     @classmethod
     def from_file(cls, config_path: str) -> 'XiaoetConfig':
@@ -41,6 +52,14 @@ class XiaoetConfig:
 
             user_agent = config_data.get('user_agent') or cls.user_agent
 
+            feishu_data = config_data.get('feishu', {})
+            feishu_config = FeishuConfig(
+                app_id=feishu_data.get('app_id', ''),
+                app_secret=feishu_data.get('app_secret', ''),
+                bitable_app_token=feishu_data.get('bitable_app_token', ''),
+                table_id=feishu_data.get('table_id', ''),
+            )
+
             return cls(
                 app_id=config_data.get('app_id', ''),
                 cookie=config_data.get('cookie', ''),
@@ -48,7 +67,9 @@ class XiaoetConfig:
                 products=products,
                 download_dir=download_dir,
                 filter=config_data.get('filter', []),
-                max_workers=config_data.get('max_workers', 3)
+                max_workers=config_data.get('max_workers', 3),
+                manifest_backend=config_data.get('manifest_backend', 'json'),
+                feishu=feishu_config,
             )
         except FileNotFoundError:
             raise FileNotFoundError(f"配置文件 {config_path} 不存在")
