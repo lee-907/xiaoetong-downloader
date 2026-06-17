@@ -56,6 +56,58 @@ class FeishuBitableClient:
         items = resp.get("data", {}).get("items", [])
         return items[0] if items else None
 
+    @staticmethod
+    def _get_text(fields: Dict[str, Any], key: str) -> str:
+        """提取飞书文本字段值（文本字段返回 [{\"text\":\"...\"}] 数组结构）"""
+        val = fields.get(key)
+        if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+            return val[0].get("text", "")
+        return str(val) if val else ""
+
+    @staticmethod
+    def _get_number(fields: Dict[str, Any], key: str):
+        """提取飞书数字字段值"""
+        val = fields.get(key)
+        if val is None:
+            return None
+        if isinstance(val, list) and len(val) > 0:
+            return val[0]
+        return val
+
+    def fetch_product_records(self, product_id: str) -> Dict[str, Dict[str, Any]]:
+        """拉取指定 product_id 的全部记录，返回 {resource_id: fields} 映射"""
+        url = f"{self.BASE_URL}/bitable/v1/apps/{self._app_token}/tables/{self._table_id}/records/search"
+        body: Dict[str, Any] = {
+            "filter": {
+                "conjunction": "and",
+                "conditions": [
+                    {"field_name": "product_id", "operator": "is", "value": [product_id]},
+                ],
+            },
+            "page_size": 500,
+        }
+        result: Dict[str, Dict[str, Any]] = {}
+        page_token: Optional[str] = None
+        page_count = 0
+        while True:
+            if page_token:
+                body["page_token"] = page_token
+            resp = self._request("POST", url, json=body)
+            data = resp.get("data", {})
+            items = data.get("items", [])
+            for item in items:
+                fields = item.get("fields", {})
+                rid = self._get_text(fields, "resource_id")
+                if rid:
+                    result[rid] = fields
+            page_count += 1
+            has_more = data.get("has_more", False)
+            page_token = data.get("page_token")
+            if not has_more or not page_token:
+                break
+        logger.info(f"从飞书多维表格加载 {len(result)} 条记录 (product_id={product_id}, {page_count} 页)")
+        return result
+
     def insert_record(self, fields: Dict[str, Any]) -> str:
         """新增一条记录，返回 record_id"""
         url = f"{self.BASE_URL}/bitable/v1/apps/{self._app_token}/tables/{self._table_id}/records"

@@ -100,14 +100,17 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
                     lambda url: '/#/wx' not in url,
                     timeout=300000
                 )
-                logger.info("✓ 扫码成功，页面已跳转")
+                logger.info("✓ 扫码成功，等待登录态同步完成...")
+                # 等 OAuth/SSO 重定向链完全结束，cookie 全部种好
+                page.wait_for_load_state("networkidle", timeout=30000)
+                time.sleep(1)
+                logger.info(f"✓ 登录态同步完成，当前 URL: {page.url}")
             except Exception:
                 logger.error("等待扫码超时（5分钟），请重试")
                 return ""
 
             # 同步登录态到课程域
             logger.info("正在同步登录态...")
-            time.sleep(2)
 
             # 根据 product_id 前缀构造正确 URL
             if product_id.startswith('course_'):
