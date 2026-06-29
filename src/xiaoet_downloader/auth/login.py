@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import json
-import subprocess
 import time
 import requests
+from urllib.parse import quote
+
 from ..utils.logger import logger
 
 LOGIN_PAGE = "https://study.xiaoe-tech.com/#/wx"
@@ -35,11 +36,91 @@ def check_cookie_valid(cookie: str, app_id: str, user_agent: str) -> bool:
         return False
 
 
+# ============================================================
+# Helpers
+# ============================================================
+
+def _build_direct_login_url(app_id: str, product_id: str) -> str:
+    """构造带 LoginCard=login_wechat 的直接扫码登录 URL（使用店铺实际域名 h5.xet.pomoho.com）"""
+    if product_id.startswith('course_'):
+        path = 'ecourse'
+    elif product_id.startswith('p_'):
+        path = 'column'
+    else:
+        path = 'ecourse'
+    domain = f"{app_id}.h5.xet.pomoho.com"
+    course_url = (
+        f"https://{domain}/p/course/{path}/{product_id}"
+        f"?l_program=xe_know_pc&sub_course_list_mode=0"
+    )
+    encoded = quote(course_url, safe='')
+    return (
+        f"https://{domain}/p/t/free/v1/basic-platform/"
+        f"h5_basic/login/auth?LoginCard=login_wechat&redirect_url={encoded}"
+    )
+
+
+def _is_on_target_domain(url: str, app_id: str) -> bool:
+    """是否在课程内容域"""
+    return (
+        f"{app_id}.h5.xiaoeknow.com" in url
+        or f"{app_id}.h5.xet." in url
+    )
+
+
+def _is_auth_page(url: str) -> bool:
+    """是否为登录/认证页面"""
+    return '/login' in url or '/auth' in url
+
+
+def _handle_checkbox(page):
+    """尝试勾选协议复选框"""
+    try:
+        cb = page.locator('input[type="checkbox"]').first
+        cb.wait_for(state="attached", timeout=3000)
+        cb.check(force=True)
+        logger.info("✓ 已勾选协议复选框")
+        return
+    except Exception:
+        pass
+    try:
+        page.evaluate("""
+            () => {
+                const cb = document.querySelector('input[type="checkbox"]');
+                if (cb && !cb.checked) { cb.click(); return true; }
+                const el = document.querySelector('.el-checkbox');
+                if (el) el.click();
+                return true;
+            }
+        """)
+        logger.info("✓ 已勾选协议复选框 (js)")
+    except Exception:
+        pass
+
+
+def _extract_cookies(context) -> str:
+    """从浏览器 context 提取所有 cookie"""
+    all_cookies = context.cookies()
+    cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in all_cookies)
+    names = [c['name'] for c in all_cookies]
+    logger.info(f"✓ 获取到 {len(all_cookies)} 个 cookie: {names}")
+    logger.info(f"Cookie:\n{cookie_str}")
+    return cookie_str
+
+
+# ============================================================
+# QR code login
+# ============================================================
+
 def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
-    """Playwright 打开微信登录页，用户扫码后返回 cookie 字符串"""
+    """打开浏览器，直接导航到带 LoginCard=login_wechat 的登录页，
+    用户扫码后 OAuth/SSO 链重定向到课程页，提取 cookie。
+
+    product_id 为空时回退到旧版 study.xiaoe-tech.com/#/wx 扫码页。
+    """
     from playwright.sync_api import sync_playwright
 
-    logger.info("正在后台获取登录二维码...")
+    logger.info("正在准备登录...")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
@@ -47,102 +128,49 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
         page = context.new_page()
 
         try:
-            page.goto(LOGIN_PAGE, wait_until="domcontentloaded", timeout=30000)
-            time.sleep(2)
+            # ======== Step 1: 直接打开扫码页 ========
 
-            # 勾选「已阅读并同意」复选框（二维码需要勾选后才显示）
+            if product_id:
+                login_url = _build_direct_login_url(app_id, product_id)
+            else:
+                login_url = LOGIN_PAGE
+
+            logger.info("打开微信扫码页...")
+            page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
             try:
-                time.sleep(1)
-                checked = False
-
-                checkbox = page.locator('input[type="checkbox"]').first
-                try:
-                    checkbox.wait_for(state="attached", timeout=5000)
-                    checkbox.check(force=True)
-                    checked = True
-                    logger.info("✓ 已勾选协议复选框 (input)")
-                except Exception:
-                    pass
-
-                if not checked:
-                    try:
-                        page.evaluate("""
-                            () => {
-                                const cb = document.querySelector('input[type="checkbox"]');
-                                if (cb && !cb.checked) { cb.click(); return true; }
-                                const el = document.querySelector('.el-checkbox');
-                                if (el) el.click();
-                                return true;
-                            }
-                        """)
-                        checked = True
-                        logger.info("✓ 已勾选协议复选框 (js)")
-                    except Exception:
-                        pass
-
-                if not checked:
-                    label = page.locator("label").filter(has_text="已阅读并同意").first
-                    label.wait_for(state="visible", timeout=5000)
-                    box = label.bounding_box()
-                    if box:
-                        page.mouse.click(box['x'] + 15, box['y'] + box['height'] / 2)
-                        checked = True
-                        logger.info("✓ 已勾选协议复选框 (label+offset)")
-
-                if not checked:
-                    raise Exception("所有方式均失败")
+                page.wait_for_load_state("networkidle", timeout=20000)
             except Exception:
-                logger.warning("未能自动勾选协议复选框，请手动勾选后扫码")
+                pass
+            time.sleep(1)
 
-            # 等待扫码后跳转
+            logger.info(f"当前页面: {page.url[:120]}...")
+
+            # ======== Step 2: 复选框 ========
+
+            _handle_checkbox(page)
+
+            # ======== Step 3: 等待扫码完成 ========
+
+            logger.info("=" * 50)
+            logger.info("请在浏览器中扫码登录（5分钟超时）")
+            logger.info("=" * 50)
+
+            pre_scan_url = page.url
+
             try:
                 page.wait_for_url(
-                    lambda url: '/#/wx' not in url,
+                    lambda url: url != pre_scan_url,
                     timeout=300000
                 )
-                logger.info("✓ 扫码成功，等待登录态同步完成...")
-                # 等 OAuth/SSO 重定向链完全结束，cookie 全部种好
-                page.wait_for_load_state("networkidle", timeout=30000)
-                time.sleep(1)
-                logger.info(f"✓ 登录态同步完成，当前 URL: {page.url}")
+                logger.info(f"✓ 检测到跳转: {page.url[:120]}...")
+                time.sleep(3)
+                logger.info("✓ 登录完成")
             except Exception:
-                logger.error("等待扫码超时（5分钟），请重试")
-                return ""
+                logger.warning("等待超时（5分钟），尝试提取当前 Cookie...")
 
-            # 同步登录态到课程域
-            logger.info("正在同步登录态...")
+            # ======== Step 4: 提取 Cookie ========
 
-            # 根据 product_id 前缀构造正确 URL
-            if product_id.startswith('course_'):
-                path = 'ecourse'
-            elif product_id.startswith('p_'):
-                path = 'column'
-            else:
-                path = 'ecourse'
-            course_url = (
-                f"https://{app_id}.h5.xiaoeknow.com/p/course/{path}/{product_id}"
-                f"?l_program=xe_know_pc&sub_course_list_mode=0"
-            )
-            try:
-                # 导航到课程页，等待 SSO 重定向链完成
-                page.goto(course_url, wait_until="networkidle", timeout=60000)
-                time.sleep(2)
-                # 如果仍停留在 auth 页面，再等待一段时间
-                if 'login/auth' in page.url:
-                    logger.info("等待 SSO 重定向...")
-                    page.wait_for_url(lambda u: 'login/auth' not in u, timeout=30000)
-                    time.sleep(2)
-                logger.info(f"已访问课程页，当前 URL: {page.url}")
-            except Exception as e:
-                logger.warning(f"访问课程页失败（可能已部分完成）: {e}")
-
-            # 提取所有 cookie
-            all_cookies = context.cookies()
-            cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in all_cookies)
-            names = [c['name'] for c in all_cookies]
-            logger.info(f"✓ 获取到 {len(all_cookies)} 个 cookie: {names}")
-
-            return cookie_str
+            return _extract_cookies(context)
 
         finally:
             browser.close()

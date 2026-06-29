@@ -82,8 +82,6 @@ class XiaoetConfig:
         """验证配置是否完整"""
         if not self.app_id:
             raise ValueError("app_id 不能为空")
-        if not self.cookie:
-            raise ValueError("cookie 不能为空，可通过扫码登录自动获取")
         if not self.products:
             raise ValueError("products 不能为空")
         for i, p in enumerate(self.products):
