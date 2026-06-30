@@ -6,6 +6,7 @@ import requests
 from typing import Dict, List, Tuple, Optional, Any
 from ..models.config import XiaoetConfig
 from ..models.resource import Resource
+from ..utils.logger import logger
 
 
 class XiaoetAPIClient:
@@ -62,7 +63,8 @@ class XiaoetAPIClient:
                 url = self.GET_COLUMN_ITEMS_URL_P.format(self.config.app_id)
                 all_items = []
                 current_page = page_index
-                while True:
+                max_pages = 50  # 安全上限
+                while current_page <= max_pages:
                     payload = {
                         'bizData[column_id]': column_id,
                         'bizData[page_index]': str(current_page),
@@ -82,36 +84,41 @@ class XiaoetAPIClient:
                 return [(item.get('resource_id'), item.get('resource_title')) for item in all_items]
             else:
                 url = self.GET_COLUMN_ITEMS_URL.format(self.config.app_id)
+                logger.info(f"请求课程资源 API: {url[:80]}...")
                 all_items = []
-                current_page = page_index
-                while True:
-                    payload = {
-                        'bizData[app_id]': app_id,
-                        'bizData[p_id]': p_id,
-                        'bizData[course_id]': column_id,
-                        'bizData[page_index]': str(current_page),
-                        'bizData[page_size]': str(page_size),
-                        'bizData[sort]': sort
-                    }
-                    response = self.session.post(url, headers=headers, data=payload, timeout=30)
-                    response.raise_for_status()
-                    data = response.json().get('data', {})
-                    items = data.get('list', [])
-                    if not items:
-                        break
-                    all_items.extend(items)
-                    if len(items) < page_size:
-                        break
-                    current_page += 1
+                seen_ids = set()
+                # 此 API 的 page_index 参数无效，用大 page_size 一次拉取 + 去重兜底
+                effective_page_size = max(page_size, 500)
+                payload = {
+                    'bizData[app_id]': app_id,
+                    'bizData[p_id]': p_id,
+                    'bizData[course_id]': column_id,
+                    'bizData[page_index]': '1',
+                    'bizData[page_size]': str(effective_page_size),
+                    'bizData[sort]': sort
+                }
+                response = self.session.post(url, headers=headers, data=payload, timeout=30)
+                response.raise_for_status()
+                data = response.json().get('data', {})
+                items = data.get('list', [])
+                total_expected = data.get('total', None)
+                logger.info(f"  获取到 {len(items)} 条 (total={total_expected})")
+                for i in items:
+                    rid = i.get('resource_id')
+                    if rid not in seen_ids:
+                        seen_ids.add(rid)
+                        all_items.append(i)
 
                 result = []
                 for item in all_items:
                     children = item.get('children', [])
                     if children:
+                        logger.info(f"  递归获取子资源: {item.get('resource_id')} ({len(children)} 个子项)")
                         sub = self.get_column_items(app_id, column_id, item.get('resource_id'))
                         result.extend(sub)
                     else:
                         result.append((item.get('resource_id'), item.get('resource_title')))
+                logger.info(f"课程资源获取完成: {len(result)} 个资源")
                 return result
         except requests.RequestException as e:
             raise Exception(f"获取专栏项目列表失败: {str(e)}")

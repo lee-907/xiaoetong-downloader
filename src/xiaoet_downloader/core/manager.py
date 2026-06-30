@@ -109,6 +109,7 @@ class XiaoetDownloadManager:
                 return results
 
             # 获取课程资源列表
+            logger.info(f"正在获取课程资源列表 (product_id={product_id})...")
             resource_items = self.api_client.get_column_items(self.config.app_id, product_id)
             if not resource_items:
                 logger.warning(f"未找到课程资源: {product['product_name']}")
