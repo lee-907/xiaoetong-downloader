@@ -87,27 +87,41 @@ class XiaoetAPIClient:
                 logger.info(f"请求课程资源 API: {url[:80]}...")
                 all_items = []
                 seen_ids = set()
-                # 此 API 的 page_index 参数无效，用大 page_size 一次拉取 + 去重兜底
-                effective_page_size = max(page_size, 500)
-                payload = {
-                    'bizData[app_id]': app_id,
-                    'bizData[p_id]': p_id,
-                    'bizData[course_id]': column_id,
-                    'bizData[page_index]': '1',
-                    'bizData[page_size]': str(effective_page_size),
-                    'bizData[sort]': sort
-                }
-                response = self.session.post(url, headers=headers, data=payload, timeout=30)
-                response.raise_for_status()
-                data = response.json().get('data', {})
+
+                def _fetch(page_size_to_use: int):
+                    payload = {
+                        'bizData[app_id]': app_id,
+                        'bizData[p_id]': p_id,
+                        'bizData[course_id]': column_id,
+                        'bizData[page_index]': '1',
+                        'bizData[page_size]': str(page_size_to_use),
+                        'bizData[sort]': sort,
+                    }
+                    resp = self.session.post(url, headers=headers, data=payload, timeout=30)
+                    resp.raise_for_status()
+                    return resp.json().get('data', {})
+
+                # 先探一次拿 total，再按 total 一次性拉全量（此 API 忽略 page_index）
+                data = _fetch(200)
                 items = data.get('list', [])
-                total_expected = data.get('total', None)
-                logger.info(f"  获取到 {len(items)} 条 (total={total_expected})")
+                total = data.get('total') or len(items)
+                fetched = len(items)
                 for i in items:
                     rid = i.get('resource_id')
                     if rid not in seen_ids:
                         seen_ids.add(rid)
                         all_items.append(i)
+
+                if fetched < total:
+                    data = _fetch(total)
+                    items = data.get('list', [])
+                    for i in items:
+                        rid = i.get('resource_id')
+                        if rid not in seen_ids:
+                            seen_ids.add(rid)
+                            all_items.append(i)
+
+                logger.info(f"  获取到 {len(all_items)} 条 (total={total})")
 
                 result = []
                 for item in all_items:
