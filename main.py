@@ -31,6 +31,7 @@ def main():
         epilog="""
 使用示例:
   python main.py                           # 下载所有课程
+  python main.py --course "行业知识圈"      # 只下载指定课程
   python main.py --login                   # 仅扫码登录，保存 cookie 后退出
   python main.py --single v_123456        # 下载单个视频
   python main.py --config custom.json     # 使用自定义配置文件
@@ -50,6 +51,11 @@ def main():
     parser.add_argument(
         '--single', '-s',
         help='下载单个视频资源ID'
+    )
+
+    parser.add_argument(
+        '--course',
+        help='只下载指定课程（按 product_name 或 product_id 匹配）'
     )
 
     parser.add_argument(
@@ -221,11 +227,12 @@ def main():
                 return 1
 
         # 下载所有课程
-        logger.info("开始下载所有课程")
+        logger.info("开始下载课程" if args.course else "开始下载所有课程")
         results = manager.download_all_courses(
             nocache=args.no_cache,
             auto_transcode=not args.no_transcode,
-            force=args.force
+            force=args.force,
+            course_filter=args.course or ''
         )
 
         # 返回适当的退出码

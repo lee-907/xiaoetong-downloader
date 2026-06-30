@@ -37,19 +37,33 @@ class XiaoetDownloadManager:
         return self._user_id
 
     def download_all_courses(self, nocache: bool = False, auto_transcode: bool = True,
-                             force: bool = False) -> Dict[str, Any]:
+                             force: bool = False, course_filter: str = '') -> Dict[str, Any]:
         """
         下载配置中所有课程的增量内容
+
+        Args:
+            course_filter: 可选，按 product_name 或 product_id 过滤，只下载匹配的课程
 
         Returns:
             {'courses': {product_name: {...}}, 'total_success': int, 'total_failed': int, 'total_skipped': int}
         """
         all_results = {'courses': {}, 'total_success': 0, 'total_failed': 0, 'total_skipped': 0}
 
-        for i, product in enumerate(self.config.products):
+        # 过滤课程
+        products = self.config.products
+        if course_filter:
+            products = [
+                p for p in products
+                if course_filter == p.get('product_name', '') or course_filter == p.get('product_id', '')
+            ]
+            if not products:
+                logger.warning(f"未找到匹配的课程: {course_filter}")
+                return all_results
+
+        for i, product in enumerate(products):
             course_dir = self.config.get_course_dir(product)
             logger.info(f"\n{'='*50}")
-            logger.info(f"[{i+1}/{len(self.config.products)}] 课程: {product['product_name']} ({product['product_id']})")
+            logger.info(f"[{i+1}/{len(products)}] 课程: {product['product_name']} ({product['product_id']})")
             logger.info(f"{'='*50}")
 
             results = self.download_course(product, course_dir, nocache, auto_transcode, force)
