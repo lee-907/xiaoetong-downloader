@@ -4,6 +4,7 @@
 import json
 import time
 import requests
+from typing import Optional
 from urllib.parse import quote
 
 from ..utils.logger import logger
@@ -98,6 +99,40 @@ def _handle_checkbox(page):
         pass
 
 
+def _save_qrcode_image(page) -> Optional[str]:
+    """从页面提取二维码图片，保存为 PNG 临时文件，返回路径"""
+    import tempfile, base64
+
+    time.sleep(3)
+
+    try:
+        src = page.evaluate("""() => {
+            const imgs = document.querySelectorAll('img');
+            for (const img of imgs) {
+                if (img.src && img.src.startsWith('data:image') && img.clientWidth > 100)
+                    return img.src;
+            }
+            return null;
+        }""")
+    except Exception:
+        src = None
+
+    if not src:
+        return None
+
+    try:
+        base64_data = src.split(",", 1)[1]
+        qr_bytes = base64.b64decode(base64_data)
+        path = tempfile.mktemp(suffix=".png", prefix="xiaoetong_qrcode_")
+        with open(path, "wb") as f:
+            f.write(qr_bytes)
+        logger.info(f"✓ 二维码已保存: {path}")
+        return path
+    except Exception as e:
+        logger.warning(f"保存二维码失败: {e}")
+        return None
+
+
 def _extract_cookies(context) -> str:
     """从浏览器 context 提取所有 cookie"""
     all_cookies = context.cookies()
@@ -149,10 +184,13 @@ def qrcode_login(app_id: str, product_id: str, user_agent: str) -> str:
 
             _handle_checkbox(page)
 
+            # 保存二维码图片供后续使用（如 Hermes 发飞书）
+            _save_qrcode_image(page)
+
             # ======== Step 3: 等待扫码完成 ========
 
             logger.info("=" * 50)
-            logger.info("请在浏览器中扫码登录（5分钟超时）")
+            logger.info("请扫码登录（5分钟超时，终端或浏览器均可）")
             logger.info("=" * 50)
 
             pre_scan_url = page.url
