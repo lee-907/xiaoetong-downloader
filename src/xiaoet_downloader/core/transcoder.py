@@ -20,8 +20,7 @@ class VideoTranscoder:
 
     def transcode_video(self, resource: Resource, path: str,
                         max_retries: int = 2) -> DownloadResult:
-        lesson_dir = os.path.join(path, FileUtils.sanitize_filename(
-            FileUtils.sortable_title(resource.title)))
+        lesson_dir = os.path.join(path, FileUtils.sanitize_filename(resource.title))
         cache_dir = os.path.join(lesson_dir, 'cache')
         metadata_file = os.path.join(cache_dir, 'metadata.json')
 
@@ -40,8 +39,7 @@ class VideoTranscoder:
                 return DownloadResult(resource, False, "视频下载不完整，无法合并")
 
             # 处理文件名，替换非法字符
-            safe_title = FileUtils.sanitize_filename(
-                FileUtils.sortable_title(metadata.title))
+            safe_title = FileUtils.sanitize_filename(metadata.title)
             if not safe_title:
                 safe_title = resource.resource_id
 

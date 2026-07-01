@@ -49,8 +49,7 @@ class VideoDownloader:
             return DownloadResult(resource, False, "无效的播放地址")
 
         # TS 缓存放在课程目录下的 cache/ 子目录
-        lesson_dir = os.path.join(download_dir, FileUtils.sanitize_filename(
-            FileUtils.sortable_title(resource.title)))
+        lesson_dir = os.path.join(download_dir, FileUtils.sanitize_filename(resource.title))
         resource_dir = os.path.join(lesson_dir, 'cache')
         FileUtils.ensure_dir(resource_dir)
 
