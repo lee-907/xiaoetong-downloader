@@ -379,7 +379,8 @@ class XiaoetDownloadManager:
             if not images:
                 return 0
 
-            lesson_dir = os.path.join(course_dir, FileUtils.sanitize_filename(resource.title))
+            lesson_dir = os.path.join(course_dir, FileUtils.sanitize_filename(
+                FileUtils.sortable_title(resource.title)))
             ppt_dir = os.path.join(lesson_dir, 'ppt')
             FileUtils.ensure_dir(ppt_dir)
 
