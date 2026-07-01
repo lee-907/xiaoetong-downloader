@@ -14,6 +14,17 @@ class FileUtils:
     """文件处理工具类"""
     
     @staticmethod
+    def sortable_title(title: str) -> str:
+        """提取标题中的日期并以 YYYYMMDD- 格式前置，方便按文件名排序。
+        '【xxx】2026年6月27日 标题' → '20260627-【xxx】2026年6月27日 标题'
+        """
+        m = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', title)
+        if m:
+            y, mo, d = m.group(1), m.group(2), m.group(3)
+            return f'{y}{mo.zfill(2)}{d.zfill(2)}-{title}'
+        return title
+
+    @staticmethod
     def sanitize_filename(filename: str) -> str:
         """清理文件名，移除非法字符"""
         # 移除或替换非法字符
