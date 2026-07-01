@@ -29,12 +29,16 @@ def main():
                 skipped += 1
                 continue
 
-            # 提取日期
-            m = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', d)
+            # 提取日期（支持 23年 和 2023年 两种年份格式，日可选）
+            m = re.search(r'(\d{2,4})年(\d{1,2})月(\d{1,2})日?', d)
             if not m:
                 continue
 
             y, mo, day = m.group(1), m.group(2), m.group(3)
+            if len(y) == 2:
+                y = '20' + y
+            if not day:
+                day = '01'
             new_name = f'{y}{mo.zfill(2)}{day.zfill(2)}-{d}'
             new_path = os.path.join(root, new_name)
 
