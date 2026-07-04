@@ -60,7 +60,7 @@ class VideoTranscoder:
             input_file = os.path.join(cache_dir, 'video.m3u8')
             ff = ffmpy.FFmpeg(
                 inputs={input_file: ['-protocol_whitelist', 'crypto,file,http,https,tcp,tls']},
-                outputs={output_file: "-c:v copy -c:a copy"}
+                outputs={output_file: "-c:v copy -c:a copy -fflags +genpts"}
             )
 
             # 带重试的 ffmpeg 合并（瞬时 I/O 故障可能导致偶发非零退出）
