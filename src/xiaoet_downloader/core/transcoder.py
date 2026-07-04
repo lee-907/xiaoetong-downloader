@@ -56,11 +56,20 @@ class VideoTranscoder:
             resource.download_status = DownloadStatus.TRANSCODING
             logger.info(f"开始合并视频: {safe_title}")
 
-            # 使用ffmpy进行视频合并
-            input_file = os.path.join(cache_dir, 'video.m3u8')
+            # 用 concat demuxer 逐文件拼接 TS，不依赖 #EXTINF 时长（避免时间戳异常）
+            ts_files = sorted(
+                [f for f in os.listdir(cache_dir) if f.endswith('.ts')],
+                key=lambda x: int(x.replace('v_', '').replace('.ts', ''))
+            )
+            concat_list = os.path.join(cache_dir, 'concat_list.txt')
+            with open(concat_list, 'w') as f:
+                for tf in ts_files:
+                    f.write(f"file '{os.path.join(cache_dir, tf)}'\n")
+
             ff = ffmpy.FFmpeg(
-                inputs={input_file: ['-protocol_whitelist', 'crypto,file,http,https,tcp,tls']},
-                outputs={output_file: "-c:v copy -c:a copy -fflags +genpts"}
+                global_options=['-f', 'concat', '-safe', '0'],
+                inputs={concat_list: None},
+                outputs={output_file: '-c copy'}
             )
 
             # 带重试的 ffmpeg 合并（瞬时 I/O 故障可能导致偶发非零退出）
