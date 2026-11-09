@@ -344,6 +344,10 @@ class XiaoetDownloadManager:
 
             # room_id 由 get_interaction_images 自动从 msg/list 响应中发现，此处无需提取
 
+            if live_details is None:
+                logger.warning(f"直播回放尚未生成或不可用，稍后重试: {resource.title} ({resource.resource_id})")
+                return None
+
             if isinstance(live_details, dict):
                 # redirect/uRL 是登录重定向，不是视频地址，忽略
                 for key in ('line_sharpness',):
@@ -365,7 +369,7 @@ class XiaoetDownloadManager:
                                 return url
                     elif isinstance(item, str) and item.startswith('http'):
                         return item
-            logger.debug(f"未从直播回放数据中提取到 m3u8 地址: {resource.resource_id}")
+            logger.warning(f"未从直播回放数据中提取到 m3u8 地址: {resource.title} ({resource.resource_id})")
         except Exception as e:
             logger.error(f"获取直播回放URL时出错: {str(e)}")
         return None

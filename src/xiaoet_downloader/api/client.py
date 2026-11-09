@@ -9,6 +9,10 @@ from ..models.resource import Resource
 from ..utils.logger import logger
 
 
+class XiaoetAPIError(Exception):
+    """小鹅通业务接口返回错误（HTTP 200 但 code != 0）"""
+
+
 class XiaoetAPIClient:
     """小鹅通API客户端"""
     
@@ -28,7 +32,36 @@ class XiaoetAPIClient:
         self.session.headers.update({
             'User-Agent': config.user_agent
         })
-    
+
+    @staticmethod
+    def _parse_biz_data(resp: requests.Response, api_name: str) -> Dict[str, Any]:
+        """校验业务响应并返回 data 字典。
+
+        小鹅通鉴权失败等场景仍返回 HTTP 200，body 为
+        {"code": 19, "msg": "invalid access token", "data": ""}。
+        直接 data.get('list') 会抛 AttributeError，掩盖真实原因，这里统一转成
+        带 code/msg 的 XiaoetAPIError。
+        """
+        try:
+            payload = resp.json()
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{api_name} 返回非 JSON 响应: {e}")
+
+        if not isinstance(payload, dict):
+            raise ValueError(f"{api_name} 返回格式异常: {type(payload).__name__}")
+
+        code = payload.get('code', 0)
+        if code != 0:
+            msg = payload.get('msg') or payload.get('message') or '未知错误'
+            raise XiaoetAPIError(f"{api_name} 业务错误 (code={code}): {msg}")
+
+        data = payload.get('data')
+        if data is None or data == [] or data == "":
+            return {}
+        if not isinstance(data, dict):
+            raise ValueError(f"{api_name} 返回 data 类型异常: {type(data).__name__}")
+        return data
+
     def get_micro_navigation_info(self) -> Dict[str, Any]:
         """获取微页面导航信息"""
         url = self.GET_MICRO_NAVIGATION_URL.format(self.config.app_id)
@@ -73,8 +106,10 @@ class XiaoetAPIClient:
                     }
                     response = self.session.post(url, headers=headers, data=payload, timeout=30)
                     response.raise_for_status()
-                    data = response.json().get('data', {})
+                    data = self._parse_biz_data(response, "专栏资源列表")
                     items = data.get('list', [])
+                    if not isinstance(items, list):
+                        raise ValueError(f"专栏资源列表 list 类型异常: {type(items).__name__}")
                     if not items:
                         break
                     all_items.extend(items)
@@ -106,8 +141,8 @@ class XiaoetAPIClient:
                         try:
                             resp = self.session.post(u, headers=headers, data=payload, timeout=30)
                             resp.raise_for_status()
-                            return resp.json().get('data', {})
-                        except requests.RequestException as e:
+                            return self._parse_biz_data(resp, "课程资源列表")
+                        except (requests.RequestException, ValueError) as e:
                             last_exc = e
                             logger.warning(f"课程资源 API 请求失败 ({u[:70]}...)，尝试备用域名: {e}")
                     raise last_exc if last_exc is not None else Exception("课程资源 API 请求全部失败")
@@ -214,7 +249,13 @@ class XiaoetAPIClient:
         try:
             response = self.session.get(url, headers=headers, params=payload, timeout=30)
             response.raise_for_status()
-            return response.json().get('data', [])
+            resp_json = response.json()
+            if not isinstance(resp_json, dict):
+                raise Exception(f"获取直播回放详情响应格式异常: {type(resp_json).__name__}")
+            if resp_json.get('code', 0) != 0:
+                raise Exception(f"API返回错误: {resp_json.get('msg', '未知错误')}")
+            # data 为 null 表示回放尚未生成/不可用，交由调用方给出明确提示
+            return resp_json.get('data')
         except requests.RequestException as e:
             raise Exception(f"获取文件详情失败: {str(e)}")
         except json.JSONDecodeError as e:

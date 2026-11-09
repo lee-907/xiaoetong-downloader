@@ -5,7 +5,7 @@ import re
 import time
 import socket
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import requests
 
@@ -74,8 +74,8 @@ class FeishuBitableClient:
             return val[0]
         return val
 
-    def fetch_product_records(self, product_id: str) -> Dict[str, Dict[str, Any]]:
-        """拉取指定 product_id 的全部记录，返回 {resource_id: fields} 映射"""
+    def fetch_product_record_items(self, product_id: str) -> List[Dict[str, Any]]:
+        """拉取指定 product_id 的原始记录列表（含 record_id），用于批量迁移等操作"""
         url = f"{self.BASE_URL}/bitable/v1/apps/{self._app_token}/tables/{self._table_id}/records/search"
         body: Dict[str, Any] = {
             "filter": {
@@ -86,7 +86,7 @@ class FeishuBitableClient:
             },
             "page_size": 500,
         }
-        result: Dict[str, Dict[str, Any]] = {}
+        items_all: List[Dict[str, Any]] = []
         page_token: Optional[str] = None
         page_count = 0
         while True:
@@ -94,18 +94,24 @@ class FeishuBitableClient:
                 body["page_token"] = page_token
             resp = self._request("POST", url, json=body)
             data = resp.get("data", {})
-            items = data.get("items", [])
-            for item in items:
-                fields = item.get("fields", {})
-                rid = self._get_text(fields, "resource_id")
-                if rid:
-                    result[rid] = fields
+            items_all.extend(data.get("items", []))
             page_count += 1
             has_more = data.get("has_more", False)
             page_token = data.get("page_token")
             if not has_more or not page_token:
                 break
-        logger.info(f"从飞书多维表格加载 {len(result)} 条记录 (product_id={product_id}, {page_count} 页)")
+        logger.info(f"从飞书多维表格加载 {len(items_all)} 条原始记录 (product_id={product_id}, {page_count} 页)")
+        return items_all
+
+    def fetch_product_records(self, product_id: str) -> Dict[str, Dict[str, Any]]:
+        """拉取指定 product_id 的全部记录，返回 {resource_id: fields} 映射"""
+        result: Dict[str, Dict[str, Any]] = {}
+        for item in self.fetch_product_record_items(product_id):
+            fields = item.get("fields", {})
+            rid = self._get_text(fields, "resource_id")
+            if rid:
+                result[rid] = fields
+        logger.info(f"从飞书多维表格加载 {len(result)} 条记录 (product_id={product_id})")
         return result
 
     def insert_record(self, fields: Dict[str, Any]) -> str:
@@ -118,6 +124,13 @@ class FeishuBitableClient:
         """更新已有记录"""
         url = f"{self.BASE_URL}/bitable/v1/apps/{self._app_token}/tables/{self._table_id}/records/{record_id}"
         self._request("PUT", url, json={"fields": fields})
+
+    def batch_update_records(self, records: List[Dict[str, Any]]) -> None:
+        """批量更新记录。records: [{'record_id': ..., 'fields': {...}}, ...]，单次最多 500 条"""
+        if not records:
+            return
+        url = f"{self.BASE_URL}/bitable/v1/apps/{self._app_token}/tables/{self._table_id}/records/batch_update"
+        self._request("POST", url, json={"records": records})
 
     def upsert_record(self, product_id: str, resource_id: str, fields: Dict[str, Any]) -> None:
         """存在则更新，不存在则新增"""

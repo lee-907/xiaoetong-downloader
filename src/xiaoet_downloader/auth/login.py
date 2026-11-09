@@ -139,7 +139,7 @@ def _extract_cookies(context) -> str:
     cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in all_cookies)
     names = [c['name'] for c in all_cookies]
     logger.info(f"✓ 获取到 {len(all_cookies)} 个 cookie: {names}")
-    logger.info(f"Cookie:\n{cookie_str}")
+    logger.debug(f"Cookie 字符串长度: {len(cookie_str)}（已脱敏，不打印明文）")
     return cookie_str
 
 
