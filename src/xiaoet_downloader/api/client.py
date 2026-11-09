@@ -83,8 +83,12 @@ class XiaoetAPIClient:
                     current_page += 1
                 return [(item.get('resource_id'), item.get('resource_title')) for item in all_items]
             else:
-                url = self.GET_COLUMN_ITEMS_URL.format(self.config.app_id)
-                logger.info(f"请求课程资源 API: {url[:80]}...")
+                # citv.cn 主域名；若 TLS/反爬故障则回退到 xiaoeknow.com 同接口
+                urls = [
+                    self.GET_COLUMN_ITEMS_URL.format(self.config.app_id),
+                    f"https://{self.config.app_id}.h5.xiaoeknow.com/xe.course.business.avoidlogin.e_course.resource_catalog_list.get/1.0.0",
+                ]
+                logger.info(f"请求课程资源 API: {urls[0][:80]}...")
                 all_items = []
                 seen_ids = set()
 
@@ -97,9 +101,16 @@ class XiaoetAPIClient:
                         'bizData[page_size]': str(page_size_to_use),
                         'bizData[sort]': sort,
                     }
-                    resp = self.session.post(url, headers=headers, data=payload, timeout=30)
-                    resp.raise_for_status()
-                    return resp.json().get('data', {})
+                    last_exc = None
+                    for u in urls:
+                        try:
+                            resp = self.session.post(u, headers=headers, data=payload, timeout=30)
+                            resp.raise_for_status()
+                            return resp.json().get('data', {})
+                        except requests.RequestException as e:
+                            last_exc = e
+                            logger.warning(f"课程资源 API 请求失败 ({u[:70]}...)，尝试备用域名: {e}")
+                    raise last_exc if last_exc is not None else Exception("课程资源 API 请求全部失败")
 
                 # 先探一次拿 total，再按 total 一次性拉全量（此 API 忽略 page_index）
                 data = _fetch(200)
@@ -154,8 +165,11 @@ class XiaoetAPIClient:
         try:
             response = self.session.post(url, headers=headers, data=payload, timeout=30)
             response.raise_for_status()
-            data = response.json().get('data', {})
-            return data.get('video_info', {})
+            resp_json = response.json()
+            if isinstance(resp_json, dict) and resp_json.get('code', 0) != 0:
+                raise Exception(f"API返回错误: {resp_json.get('msg', '未知错误')}")
+            data = resp_json.get('data', {}) if isinstance(resp_json, dict) else {}
+            return data.get('video_info', {}) if isinstance(data, dict) else {}
         except requests.RequestException as e:
             raise Exception(f"获取视频详情失败: {str(e)}")
         except json.JSONDecodeError as e:
@@ -225,8 +239,11 @@ class XiaoetAPIClient:
         try:
             response = self.session.post(url, headers=headers, data=payload, timeout=30)
             response.raise_for_status()
-            data = response.json().get('data', {})
-            play_list_dict = data.get(play_sign, {}).get('play_list', {})
+            resp_json = response.json()
+            if isinstance(resp_json, dict) and resp_json.get('code', 0) != 0:
+                raise Exception(f"API返回错误: {resp_json.get('msg', '未知错误')}")
+            data = resp_json.get('data', {}) if isinstance(resp_json, dict) else {}
+            play_list_dict = data.get(play_sign, {}).get('play_list', {}) if isinstance(data, dict) else {}
             return play_list_dict
         except requests.RequestException as e:
             raise Exception(f"获取播放URL失败: {str(e)}")
